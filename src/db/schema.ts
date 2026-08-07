@@ -1,0 +1,403 @@
+/**
+ * Hartwich OS — database schema (Drizzle ORM / Postgres via Supabase)
+ *
+ * Mirrors the design in the "Hartwich OS — System Architecture" doc (§3).
+ * Two structural decisions worth remembering while editing this file:
+ *
+ *  - `companies` is the durable lead record; `deals` is one trip of a
+ *    company through the pipeline. A company can have multiple deals
+ *    over time (e.g. re-engaged after Closed-Lost) without losing its
+ *    research history.
+ *  - Every table that a future feature might need to filter, score, or
+ *    branch on carries an explicit column now (e.g. `role` on `users`,
+ *    `contactTier` on `companies`) even though only one value is in use
+ *    today — so extending behavior later is a data change, not a
+ *    migration surprise.
+ */
+
+import { relations } from "drizzle-orm";
+import {
+  boolean,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
+
+export const companySourceEnum = pgEnum("company_source", [
+  "google_places",
+  "apollo",
+  "manual",
+]);
+
+export const companyStatusEnum = pgEnum("company_status", [
+  "needs_review", // AI-qualified below confidence threshold — awaiting a human look
+  "qualified",
+  "disqualified",
+]);
+
+export const contactTierEnum = pgEnum("contact_tier", ["A", "B", "C"]);
+
+export const activityTypeEnum = pgEnum("activity_type", [
+  "email",
+  "sms",
+  "call",
+  "linkedin",
+  "note",
+  "meeting",
+]);
+
+export const activityDirectionEnum = pgEnum("activity_direction", [
+  "outbound",
+  "inbound",
+]);
+
+export const messageProviderEnum = pgEnum("message_provider", [
+  "gmail",
+  "twilio",
+]);
+
+export const messageStatusEnum = pgEnum("message_status", [
+  "draft",
+  "sent",
+  "delivered",
+  "replied",
+  "bounced",
+  "failed",
+]);
+
+export const templateChannelEnum = pgEnum("template_channel", [
+  "email",
+  "sms",
+  "linkedin",
+]);
+
+export const aiRunTargetTypeEnum = pgEnum("ai_run_target_type", [
+  "company_qualification",
+  "outreach_draft",
+  "enrichment",
+]);
+
+export const aiRunStatusEnum = pgEnum("ai_run_status", [
+  "pending",
+  "succeeded",
+  "failed",
+]);
+
+export const leadSourceTypeEnum = pgEnum("lead_source_type", [
+  "google_places",
+  "apollo",
+  "manual",
+]);
+
+// ---------------------------------------------------------------------------
+// users — the allow-listed admin accounts (see §4 of the architecture doc)
+// ---------------------------------------------------------------------------
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  role: userRoleEnum("role").notNull().default("admin"),
+  googleSub: text("google_sub").unique(), // Google's stable subject id, from Supabase Auth
+  avatarUrl: text("avatar_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// pipeline_stages — configurable Kanban columns (data, not code — see §6)
+// ---------------------------------------------------------------------------
+
+export const pipelineStages = pgTable("pipeline_stages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  position: integer("position").notNull(),
+  isWon: boolean("is_won").notNull().default(false),
+  isLost: boolean("is_lost").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// companies — the durable lead record (§3, §5 ICP fields)
+// ---------------------------------------------------------------------------
+
+export const companies = pgTable("companies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  website: text("website"),
+  phone: text("phone"),
+  addressLine: text("address_line"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+
+  source: companySourceEnum("source").notNull(),
+  sourceRefId: text("source_ref_id"), // e.g. Google Places place_id
+
+  // --- ICP / qualification signals (architecture doc §5) ---
+  googleReviewCount: integer("google_review_count"),
+  googleRating: numeric("google_rating", { precision: 3, scale: 2 }),
+  reviewSignal: jsonb("review_signal").$type<{
+    recentNegativeCount?: number;
+    unansweredApprox?: boolean;
+    sampleSnippets?: string[];
+  }>(),
+  isOwnerOperated: boolean("is_owner_operated"),
+  isFranchise: boolean("is_franchise"),
+  contactTier: contactTierEnum("contact_tier"),
+  qualificationScore: integer("qualification_score"), // 0–100
+  qualificationReasoning: text("qualification_reasoning"),
+  disqualifyReason: text("disqualify_reason"),
+  status: companyStatusEnum("status").notNull().default("needs_review"),
+
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// contacts — a person at a company
+// ---------------------------------------------------------------------------
+
+export const contacts = pgTable("contacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name"),
+  title: text("title"),
+  email: text("email"),
+  phone: text("phone"),
+  linkedinUrl: text("linkedin_url"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  source: companySourceEnum("source").notNull().default("manual"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// deals — one trip of a company through the pipeline
+// ---------------------------------------------------------------------------
+
+export const deals = pgTable("deals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  stageId: uuid("stage_id")
+    .notNull()
+    .references(() => pipelineStages.id),
+  ownerUserId: uuid("owner_user_id").references(() => users.id),
+  valueEstimate: numeric("value_estimate", { precision: 12, scale: 2 }),
+  priority: integer("priority").notNull().default(0),
+  expectedCloseDate: timestamp("expected_close_date", { withTimezone: true }),
+  stageEnteredAt: timestamp("stage_entered_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// activities — every touch: email, call, sms, linkedin, note, meeting
+// ---------------------------------------------------------------------------
+
+export const activities = pgTable("activities", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  dealId: uuid("deal_id").references(() => deals.id),
+  type: activityTypeEnum("type").notNull(),
+  direction: activityDirectionEnum("direction").notNull(),
+  bodyText: text("body_text"),
+  channelMeta: jsonb("channel_meta").$type<Record<string, unknown>>(),
+  aiGenerated: boolean("ai_generated").notNull().default(false),
+  createdBy: uuid("created_by").references(() => users.id),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// messages — delivery detail for sent/received activities
+// ---------------------------------------------------------------------------
+
+export const messages = pgTable("messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  activityId: uuid("activity_id")
+    .notNull()
+    .references(() => activities.id, { onDelete: "cascade" }),
+  provider: messageProviderEnum("provider").notNull(),
+  providerMessageId: text("provider_message_id"),
+  threadId: text("thread_id"),
+  status: messageStatusEnum("status").notNull().default("draft"),
+  toAddress: text("to_address"),
+  fromAddress: text("from_address"),
+  subject: text("subject"),
+  body: text("body"),
+  generatedByAi: boolean("generated_by_ai").notNull().default(false),
+  aiPromptVersion: text("ai_prompt_version"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// templates — reusable outreach copy, by channel
+// ---------------------------------------------------------------------------
+
+export const templates = pgTable("templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  channel: templateChannelEnum("channel").notNull(),
+  subjectTemplate: text("subject_template"),
+  bodyTemplate: text("body_template").notNull(),
+  variables: jsonb("variables").$type<string[]>(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// outreach_sequences / sequence_steps — multi-step cadences (Phase 4)
+// ---------------------------------------------------------------------------
+
+export const outreachSequences = pgTable("outreach_sequences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sequenceSteps = pgTable("sequence_steps", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sequenceId: uuid("sequence_id")
+    .notNull()
+    .references(() => outreachSequences.id, { onDelete: "cascade" }),
+  stepOrder: integer("step_order").notNull(),
+  channel: templateChannelEnum("channel").notNull(),
+  delayDays: integer("delay_days").notNull().default(0),
+  templateId: uuid("template_id").references(() => templates.id),
+});
+
+// ---------------------------------------------------------------------------
+// tasks — follow-up reminders (optionally synced to Calendar, Phase 5)
+// ---------------------------------------------------------------------------
+
+export const tasks = pgTable("tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  dealId: uuid("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+  description: text("description").notNull(),
+  assignedTo: uuid("assigned_to").references(() => users.id),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// ai_runs — audit + cost log for every AI call (§5)
+// ---------------------------------------------------------------------------
+
+export const aiRuns = pgTable("ai_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  targetType: aiRunTargetTypeEnum("target_type").notNull(),
+  targetId: uuid("target_id"),
+  model: text("model").notNull(),
+  prompt: text("prompt"),
+  tokensUsed: integer("tokens_used"),
+  costEstimateUsd: numeric("cost_estimate_usd", { precision: 8, scale: 4 }),
+  result: jsonb("result").$type<Record<string, unknown>>(),
+  status: aiRunStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// lead_sources_config — which discovery/enrichment sources are active
+// ---------------------------------------------------------------------------
+
+export const leadSourcesConfig = pgTable("lead_sources_config", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  type: leadSourceTypeEnum("type").notNull(),
+  // e.g. { keyword: "HVAC contractor", radiusMiles: 25, franchiseBlocklist: [...] }
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// audit_log — who (or which AI run) changed what
+// ---------------------------------------------------------------------------
+
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id),
+  action: text("action").notNull(), // e.g. "deal.stage_changed"
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id").notNull(),
+  diff: jsonb("diff").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Relations (for typed nested reads via Drizzle's query API)
+// ---------------------------------------------------------------------------
+
+export const companiesRelations = relations(companies, ({ many }) => ({
+  contacts: many(contacts),
+  deals: many(deals),
+  activities: many(activities),
+}));
+
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  company: one(companies, { fields: [contacts.companyId], references: [companies.id] }),
+  activities: many(activities),
+}));
+
+export const dealsRelations = relations(deals, ({ one, many }) => ({
+  company: one(companies, { fields: [deals.companyId], references: [companies.id] }),
+  stage: one(pipelineStages, { fields: [deals.stageId], references: [pipelineStages.id] }),
+  owner: one(users, { fields: [deals.ownerUserId], references: [users.id] }),
+  activities: many(activities),
+  tasks: many(tasks),
+}));
+
+export const pipelineStagesRelations = relations(pipelineStages, ({ many }) => ({
+  deals: many(deals),
+}));
+
+export const activitiesRelations = relations(activities, ({ one }) => ({
+  company: one(companies, { fields: [activities.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [activities.contactId], references: [contacts.id] }),
+  deal: one(deals, { fields: [activities.dealId], references: [deals.id] }),
+  message: one(messages, { fields: [activities.id], references: [messages.activityId] }),
+  createdByUser: one(users, { fields: [activities.createdBy], references: [users.id] }),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  activity: one(activities, { fields: [messages.activityId], references: [activities.id] }),
+}));
+
+export const outreachSequencesRelations = relations(outreachSequences, ({ many }) => ({
+  steps: many(sequenceSteps),
+}));
+
+export const sequenceStepsRelations = relations(sequenceSteps, ({ one }) => ({
+  sequence: one(outreachSequences, {
+    fields: [sequenceSteps.sequenceId],
+    references: [outreachSequences.id],
+  }),
+  template: one(templates, { fields: [sequenceSteps.templateId], references: [templates.id] }),
+}));
+
+export const tasksRelations = relations(tasks, ({ one }) => ({
+  deal: one(deals, { fields: [tasks.dealId], references: [deals.id] }),
+  company: one(companies, { fields: [tasks.companyId], references: [companies.id] }),
+  assignee: one(users, { fields: [tasks.assignedTo], references: [users.id] }),
+}));
