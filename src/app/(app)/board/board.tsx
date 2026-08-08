@@ -1,0 +1,66 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import type { PipelineStage } from "@/lib/data/pipeline-stages";
+import type { BoardDeal } from "@/lib/data/deals";
+import { moveDealAction } from "./actions";
+import Column from "./column";
+import DealCard from "./deal-card";
+
+export default function Board({
+  stages,
+  initialDeals,
+}: {
+  stages: PipelineStage[];
+  initialDeals: BoardDeal[];
+}) {
+  const [deals, setDeals] = useState(initialDeals);
+  const [activeDeal, setActiveDeal] = useState<BoardDeal | null>(null);
+  const [, startTransition] = useTransition();
+
+  // A small drag threshold so clicking a card's link still works.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  function handleDragStart(event: DragStartEvent) {
+    const deal = deals.find((d) => d.id === event.active.id);
+    setActiveDeal(deal ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDeal(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const dealId = active.id as string;
+    const targetStageId = over.id as string;
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal || deal.stageId === targetStageId) return;
+
+    const previousDeals = deals;
+    setDeals((current) =>
+      current.map((d) =>
+        d.id === dealId ? { ...d, stageId: targetStageId, stageEnteredAt: new Date() } : d
+      )
+    );
+
+    startTransition(async () => {
+      try {
+        await moveDealAction(dealId, targetStageId);
+      } catch {
+        setDeals(previousDeals);
+      }
+    });
+  }
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {stages.map((stage) => (
+          <Column key={stage.id} stage={stage} deals={deals.filter((d) => d.stageId === stage.id)} />
+        ))}
+      </div>
+      <DragOverlay>{activeDeal ? <DealCard deal={activeDeal} /> : null}</DragOverlay>
+    </DndContext>
+  );
+}
