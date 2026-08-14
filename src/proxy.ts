@@ -2,14 +2,16 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedEmail } from "@/lib/auth/allowlist";
 
-// Routes reachable without a session.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/error"];
+// Routes reachable without a session. /api/inngest is called server-to-server
+// by Inngest itself (verified by its own signing key, not our session cookie).
+const PUBLIC_PATHS = ["/login", "/auth/error", "/api/inngest"];
 
 /**
  * Runs on every request. Refreshes the Supabase session, then enforces
  * the two-person allow-list (architecture doc §4) — anyone authenticated
- * with a Google account that isn't on the list is signed out and sent
- * to /login with an explanation, regardless of how they got a session.
+ * with an email/password account that isn't on the list is signed out
+ * and sent to /login with an explanation, regardless of how they got a
+ * session.
  */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

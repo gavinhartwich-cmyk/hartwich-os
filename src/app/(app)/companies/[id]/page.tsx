@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/data/companies";
+import { listContactsForCompany } from "@/lib/data/contacts";
+import { listActivitiesForCompany } from "@/lib/data/activities";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
+import ContactsPanel from "./contacts-panel";
+import ActivityPanel from "./activity-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
 export default async function CompanyDetailPage({
@@ -11,7 +15,11 @@ export default async function CompanyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const company = await getCompanyById(id);
+  const [company, contacts, activities] = await Promise.all([
+    getCompanyById(id),
+    listContactsForCompany(id),
+    listActivitiesForCompany(id),
+  ]);
   if (!company) notFound();
 
   return (
@@ -102,6 +110,11 @@ export default async function CompanyDetailPage({
             View on board →
           </Link>
         </aside>
+      </div>
+
+      <div className="mt-8 grid gap-8 md:grid-cols-[1fr_260px]">
+        <ActivityPanel companyId={company.id} activities={activities} contacts={contacts} />
+        <ContactsPanel companyId={company.id} contacts={contacts} />
       </div>
     </div>
   );

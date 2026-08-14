@@ -1,18 +1,9 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-async function signInWithGoogle() {
-  const supabase = createClient();
-  await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-}
+import FormField from "@/components/form-field";
 
 function LoginError() {
   const searchParams = useSearchParams();
@@ -21,7 +12,7 @@ function LoginError() {
   if (error === "not_allowed") {
     return (
       <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-        That Google account isn&apos;t authorized for Hartwich OS.
+        That account isn&apos;t authorized for Hartwich OS.
       </p>
     );
   }
@@ -33,6 +24,51 @@ function LoginError() {
     );
   }
   return null;
+}
+
+function LoginForm() {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    const supabase = createClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (signInError) {
+      setError("Incorrect email or password.");
+      setSubmitting(false);
+      return;
+    }
+
+    router.push("/");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 text-left">
+      <FormField label="Email" name="email" type="email" required autoFocus />
+      <FormField label="Password" name="password" type="password" required />
+
+      {error && <p className="text-sm text-red-700">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+      >
+        {submitting ? "Signing in…" : "Sign in"}
+      </button>
+    </form>
+  );
 }
 
 export default function LoginPage() {
@@ -48,12 +84,7 @@ export default function LoginPage() {
           <LoginError />
         </Suspense>
 
-        <button
-          onClick={signInWithGoogle}
-          className="w-full rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
-        >
-          Continue with Google
-        </button>
+        <LoginForm />
 
         <p className="text-xs text-neutral-400">
           Access is limited to Hartwich Labs admins.

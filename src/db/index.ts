@@ -1,6 +1,9 @@
+import dotenv from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+
+dotenv.config({ path: ".env.local" });
 
 // DATABASE_URL comes from the Supabase project's connection string
 // (Settings → Database → Connection string → "Transaction" pooler URI
