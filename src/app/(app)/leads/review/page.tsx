@@ -5,15 +5,15 @@ import { cityState } from "@/lib/utils/format";
 import { promoteToBoardAction, disqualifyLeadAction } from "./actions";
 
 export default async function ReviewQueuePage() {
-  const companies = await listCompaniesByStatus("needs_review");
+  const companies = await listCompaniesByStatus("qualified");
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Review Queue</h1>
+          <h1 className="text-xl font-semibold">Qualified Leads</h1>
           <p className="text-sm text-neutral-500">
-            {companies.length} lead{companies.length === 1 ? "" : "s"} awaiting review
+            {companies.length} lead{companies.length === 1 ? "" : "s"} ready to reach out to
           </p>
         </div>
         <Link
@@ -26,7 +26,7 @@ export default async function ReviewQueuePage() {
 
       {companies.length === 0 ? (
         <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500 dark:border-neutral-700">
-          Nothing waiting on review — leads that score below the auto-file threshold will show up here.
+          No qualified leads yet — find leads to get started.
         </p>
       ) : (
         <ul className="space-y-3">
@@ -42,9 +42,9 @@ export default async function ReviewQueuePage() {
                       {company.name}
                     </Link>
                     <StatusBadge status={company.status} />
-                    {company.qualificationScore !== null && (
-                      <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        Score: {company.qualificationScore}
+                    {company.googleRating && (
+                      <span className="rounded bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+                        {company.googleRating}★ ({company.googleReviewCount || 0} reviews)
                       </span>
                     )}
                   </div>

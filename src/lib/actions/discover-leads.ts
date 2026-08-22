@@ -17,80 +17,78 @@ type DiscoverLeadsParams = {
  * Runs synchronously but quickly returns to user while processing continues.
  */
 export async function discoverLeads(params: DiscoverLeadsParams) {
-  const { area, keyword: userKeyword, requestedByUserId } = params;
+  const { area, keyword: userKeyword } = params;
 
-  // Spawn background processing without waiting
-  (async () => {
+  // Start background job but don't wait for it
+  setImmediate(async () => {
     try {
-      const config = await getActiveLeadSourceConfig("google_places");
-      const configValues = (config?.config ?? {}) as {
-        keyword?: string;
-        franchiseBlocklist?: string[];
-        autoFileThreshold?: number;
-      };
+      const keyword = userKeyword || "HVAC contractor";
+      const franchiseBlocklist: string[] = [];
 
-      const keyword = userKeyword || configValues.keyword || "HVAC contractor";
-      const franchiseBlocklist = configValues.franchiseBlocklist ?? [];
-
+      console.log(`[LD] Starting for "${area}" with keyword "${keyword}"`);
       const places = await searchHvacCompanies({ area, keyword });
+      console.log(`[LD] Found ${places.length} companies`);
 
-      let qualified = 0;
-      let needsReview = 0;
-      let disqualifiedCount = 0;
-      let duplicates = 0;
+      if (places.length === 0) {
+        console.log(`[LD] No results for ${area}`);
+        return;
+      }
+
+      let created = 0;
+      let skipped = 0;
 
       for (const place of places) {
         try {
-          const dup = await findDuplicateCompany({
+          // Check if duplicate FIRST (before wasting time on enrichment)
+          const existing = await findDuplicateCompany({
             name: place.name,
             website: place.website,
           });
-          if (dup) {
-            duplicates++;
+
+          if (existing) {
+            skipped++;
             continue;
           }
 
-          const [enrichment, reviewSnippets] = await Promise.all([
-            enrichCompanyFromWebsite(place.website),
-            getPlaceReviewSnippets(place.placeId),
-          ]);
-
+          // Qualify based on Google reviews only (no Groq needed)
           const qualification = await qualifyLead({
             place,
-            enrichment,
-            reviewSnippets,
+            enrichment: null, // Don't need enrichment for simple review-based qualification
+            reviewSnippets: [],
             franchiseBlocklist,
-            autoFileThreshold: configValues.autoFileThreshold,
           });
 
+          // Only save if qualified
+          if (qualification.disqualifyReason) {
+            skipped++;
+            continue;
+          }
+
+          // Save to database
           await createDiscoveredCompany({
             place,
             placeId: place.placeId,
             qualification,
           });
 
-          if (qualification.disqualifyReason) {
-            disqualifiedCount++;
-          } else if (qualification.autoFile) {
-            qualified++;
-          } else {
-            needsReview++;
-          }
-        } catch (error) {
-          console.error(`Failed to process ${place.name}:`, error);
+          created++;
+          console.log(
+            `[LD] Qualified: ${place.name} (${place.userRatingCount || 0} reviews, ${place.rating || 5}★)`
+          );
+        } catch (err) {
+          console.error(`[LD] Error: ${place.name}:`, err);
+          skipped++;
         }
       }
 
+      console.log(`[LD] Complete: ${created} created, ${skipped} skipped`);
       await notifySlack(
-        `Lead mining for "${keyword}" in ${area}: ${places.length} found — ` +
-          `${qualified} qualified, ${needsReview} need review, ${disqualifiedCount} disqualified, ${duplicates} duplicates skipped.`
-      );
-    } catch (error) {
-      console.error("Lead discovery failed:", error);
-      await notifySlack(`❌ Lead mining failed for ${area}: ${error}`).catch(() => {});
+        `Lead mining for "${keyword}" in ${area}: ${created} saved (${skipped} duplicates/errors)`
+      ).catch(() => {});
+    } catch (err) {
+      console.error(`[LD] Fatal error:`, err);
     }
-  })();
+  });
 
-  // Return immediately so user sees results page
   return { started: true };
 }

@@ -91,98 +91,35 @@ export async function qualifyLead(input: {
   franchiseBlocklist: string[];
   autoFileThreshold?: number;
 }): Promise<QualificationResult> {
-  const { place, enrichment, reviewSnippets, franchiseBlocklist } = input;
-  const threshold = input.autoFileThreshold ?? DEFAULT_AUTO_FILE_THRESHOLD;
+  const { place } = input;
 
-  if (
-    place.rating !== null &&
-    place.userRatingCount !== null &&
-    place.userRatingCount >= 100 &&
-    place.rating >= 4.5
-  ) {
+  // Simple rule: qualify if 0-60 reviews OR below 4 stars
+  const reviewCount = place.userRatingCount ?? 0;
+  const rating = place.rating ?? 5;
+
+  const isQualified = reviewCount <= 60 || rating < 4;
+
+  if (!isQualified) {
     return disqualified(
-      "100+ Google reviews and a 4.5+ rating (auto-disqualify gate).",
+      `Too many reviews (${reviewCount}) with high rating (${rating}★) — they don't need help.`,
       false
     );
   }
 
-  if (!place.website && !place.phone) {
-    return disqualified("No website and no phone found — no working contact path.", false);
-  }
-
-  const blocklist = [...HVAC_FRANCHISE_BRANDS, ...franchiseBlocklist].map((b) => b.toLowerCase());
-  const nameLower = place.name.toLowerCase();
-  if (blocklist.some((brand) => nameLower.includes(brand))) {
-    return disqualified(`Matches known HVAC franchise brand list: "${place.name}".`, true);
-  }
-
-  const context = buildContext(place, enrichment, reviewSnippets);
-
-  try {
-    const response = await structuredCompletion({
-      schemaName: "lead_qualification",
-      jsonSchema: QUALIFICATION_JSON_SCHEMA,
-      zodSchema: QualificationSchema,
-      system: RUBRIC_SYSTEM_PROMPT,
-      user: context,
-    });
-
-    await logAiRun({
-      targetType: "company_qualification",
-      model: GROQ_STRUCTURED_MODEL,
-      tokensUsed: response ? response.usage.inputTokens + response.usage.outputTokens : null,
-      result: response?.parsed ?? null,
-      status: response ? "succeeded" : "failed",
-    });
-
-    if (!response) {
-      return {
-        autoFile: false,
-        score: 0,
-        reasoning: "AI qualification response could not be parsed — routed to manual review.",
-        contactTier: null,
-        isOwnerOperated: null,
-        isFranchise: false,
-        disqualifyReason: null,
-      };
-    }
-
-    const result = response.parsed;
-
-    if (result.isFranchise) {
-      return disqualified(
-        result.franchiseReasoning ?? "Identified as a large franchise/multi-location chain.",
-        true
-      );
-    }
-
-    return {
-      autoFile: result.score >= threshold,
-      score: result.score,
-      reasoning: result.reasoning,
-      contactTier: result.contactTier,
-      isOwnerOperated: result.isOwnerOperated,
-      isFranchise: false,
-      disqualifyReason: null,
-    };
-  } catch (err) {
-    await logAiRun({
-      targetType: "company_qualification",
-      model: GROQ_STRUCTURED_MODEL,
-      status: "failed",
-      result: { error: err instanceof Error ? err.message : String(err) },
-    });
-    // Fail open to manual review, not a silent drop — a human decides.
-    return {
-      autoFile: false,
-      score: 0,
-      reasoning: "AI qualification call failed — needs manual review.",
-      contactTier: null,
-      isOwnerOperated: null,
-      isFranchise: false,
-      disqualifyReason: null,
-    };
-  }
+  return {
+    autoFile: true, // All qualified leads auto-file
+    score: 100,
+    reasoning:
+      reviewCount === 0
+        ? "No Google reviews — perfect opportunity to establish review pipeline."
+        : reviewCount <= 60
+          ? `Only ${reviewCount} reviews — good opportunity to reach out.`
+          : `${rating}★ rating — below 4 stars means they need help with service quality.`,
+    contactTier: null,
+    isOwnerOperated: null,
+    isFranchise: false,
+    disqualifyReason: null,
+  };
 }
 
 function disqualified(reason: string, isFranchise: boolean): QualificationResult {
