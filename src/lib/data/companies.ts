@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, ilike, ne } from "drizzle-orm";
+import { asc, desc, eq, ilike, ne, and } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, deals, pipelineStages, contacts } from "@/db/schema";
 import type { CompanyEnrichment } from "@/lib/ai/enrich-company";
@@ -21,7 +21,7 @@ export async function listCompanies(search?: string) {
       .select()
       .from(companies)
       .where(
-        db.and(
+        and(
           ilike(companies.name, `%${search.trim()}%`),
           ne(companies.status, "disqualified")
         )

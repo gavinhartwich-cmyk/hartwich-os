@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { companies, deals } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 /**
  * Clean up leads: delete all disqualified and needs_review companies.
@@ -62,7 +62,7 @@ export async function GET() {
     const stats = await db
       .select({
         status: companies.status,
-        count: db.raw("count(*)::int"),
+        count: sql<number>`cast(count(*) as integer)`,
       })
       .from(companies)
       .groupBy(companies.status);

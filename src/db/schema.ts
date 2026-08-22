@@ -100,6 +100,13 @@ export const leadSourceTypeEnum = pgEnum("lead_source_type", [
   "manual",
 ]);
 
+export const emailDraftStatusEnum = pgEnum("email_draft_status", [
+  "pending_review",
+  "approved",
+  "rejected",
+  "sent",
+]);
+
 // ---------------------------------------------------------------------------
 // users — the allow-listed admin accounts (see §4 of the architecture doc)
 // ---------------------------------------------------------------------------
@@ -162,6 +169,12 @@ export const companies = pgTable("companies", {
 
   notes: text("notes"),
   createdBy: uuid("created_by").references(() => users.id),
+  
+  // --- Email warm-up tracking (Phase 3) ---
+  warmupStatus: text("warmup_status").notNull().default("not_started"),
+  warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
+  dailySendCount: integer("daily_send_count").notNull().default(0),
+  lastSendResetAt: timestamp("last_send_reset_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -331,6 +344,37 @@ export const leadSourcesConfig = pgTable("lead_sources_config", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+
+
+// ---------------------------------------------------------------------------
+// email_drafts — pending-review emails (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const emailDrafts = pgTable("email_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  dealId: uuid("deal_id").references(() => deals.id),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  status: emailDraftStatusEnum("status").notNull().default("pending_review"),
+  aiRunId: uuid("ai_run_id").references(() => aiRuns.id),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedBy: uuid("rejected_by").references(() => users.id),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  sentFromEmailIndex: integer("sent_from_email_index"),
+  messageId: uuid("message_id").references(() => messages.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // audit_log — who (or which AI run) changed what
 // ---------------------------------------------------------------------------
@@ -400,4 +444,15 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   deal: one(deals, { fields: [tasks.dealId], references: [deals.id] }),
   company: one(companies, { fields: [tasks.companyId], references: [companies.id] }),
   assignee: one(users, { fields: [tasks.assignedTo], references: [users.id] }),
+}));
+
+
+export const emailDraftsRelations = relations(emailDrafts, ({ one }) => ({
+  company: one(companies, { fields: [emailDrafts.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [emailDrafts.contactId], references: [contacts.id] }),
+  deal: one(deals, { fields: [emailDrafts.dealId], references: [deals.id] }),
+  aiRun: one(aiRuns, { fields: [emailDrafts.aiRunId], references: [aiRuns.id] }),
+  approver: one(users, { fields: [emailDrafts.approvedBy], references: [users.id] }),
+  rejecter: one(users, { fields: [emailDrafts.rejectedBy], references: [users.id] }),
+  message: one(messages, { fields: [emailDrafts.messageId], references: [messages.id] }),
 }));

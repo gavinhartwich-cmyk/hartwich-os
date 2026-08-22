@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { listPipelineStages } from "@/lib/data/pipeline-stages";
 import { listDealsForBoard } from "@/lib/data/deals";
+import { listPendingEmailDrafts } from "@/lib/data/email-drafts";
 import Board from "./board";
 
 export default async function BoardPage() {
-  const [stages, deals] = await Promise.all([listPipelineStages(), listDealsForBoard()]);
+  const [stages, deals, emailDrafts] = await Promise.all([
+    listPipelineStages(),
+    listDealsForBoard(),
+    listPendingEmailDrafts(),
+  ]);
 
   return (
     <div>
@@ -27,7 +32,7 @@ export default async function BoardPage() {
           the default stages, then refresh.
         </p>
       ) : (
-        <Board stages={stages} initialDeals={deals} />
+        <Board stages={stages} initialDeals={deals} emailDrafts={emailDrafts} />
       )}
     </div>
   );
