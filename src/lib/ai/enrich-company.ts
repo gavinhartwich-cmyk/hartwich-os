@@ -7,6 +7,14 @@ const EnrichmentSchema = z.object({
   servicesOffered: z.array(z.string()),
   apparentSize: z.enum(["solo", "small", "medium", "large", "unknown"]),
   visibleContactNames: z.array(z.string()),
+  decisionMaker: z.object({
+    name: z.string().optional(),
+    title: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    linkedinUrl: z.string().optional(),
+    instagramHandle: z.string().optional(),
+  }),
   summary: z.string(),
 });
 
@@ -20,9 +28,20 @@ const ENRICHMENT_JSON_SCHEMA = {
     servicesOffered: { type: "array", items: { type: "string" } },
     apparentSize: { type: "string", enum: ["solo", "small", "medium", "large", "unknown"] },
     visibleContactNames: { type: "array", items: { type: "string" } },
+    decisionMaker: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        title: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        linkedinUrl: { type: "string" },
+        instagramHandle: { type: "string" },
+      },
+    },
     summary: { type: "string" },
   },
-  required: ["servicesOffered", "apparentSize", "visibleContactNames", "summary"],
+  required: ["servicesOffered", "apparentSize", "visibleContactNames", "decisionMaker", "summary"],
   additionalProperties: false,
 };
 
@@ -67,8 +86,10 @@ export async function enrichCompanyFromWebsite(website: string | null): Promise<
       zodSchema: EnrichmentSchema,
       system:
         "You read small-business websites and extract a structured summary. " +
-        'Only report what is actually stated or clearly implied on the page — do not guess. ' +
-        'Use "unknown" for apparentSize if you cannot tell.',
+        "Extract the primary decision-maker (owner, CEO, manager) with as much detail as possible: name, title, email, phone, LinkedIn URL, Instagram handle. " +
+        "Look in about pages, team pages, contact pages, LinkedIn links, social media links, email footers. " +
+        'Only report what is actually stated or clearly implied on the page — do not guess or infer. ' +
+        'Use "unknown" for apparentSize if you cannot tell. Return empty strings for decision maker fields not found.',
       user: `Website (${website}) text content:\n\n${text}`,
     });
 

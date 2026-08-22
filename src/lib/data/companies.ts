@@ -1,7 +1,8 @@
 import "server-only";
 import { asc, desc, eq, ilike, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, deals, pipelineStages } from "@/db/schema";
+import { companies, deals, pipelineStages, contacts } from "@/db/schema";
+import type { CompanyEnrichment } from "@/lib/ai/enrich-company";
 
 export type CompanyInput = {
   name: string;
@@ -174,6 +175,7 @@ export type DiscoveredCompanyInput = {
     isFranchise: boolean;
     disqualifyReason: string | null;
   };
+  enrichment?: CompanyEnrichment | null;
 };
 
 /**
@@ -212,6 +214,23 @@ export async function createDiscoveredCompany(input: DiscoveredCompanyInput) {
         status,
       })
       .returning();
+
+    // Create contact from enrichment's decision maker info
+    if (input.enrichment?.decisionMaker) {
+      const dm = input.enrichment.decisionMaker;
+      if (dm.name || dm.email || dm.phone || dm.linkedinUrl) {
+        await tx.insert(contacts).values({
+          companyId: company.id,
+          name: dm.name || null,
+          title: dm.title || null,
+          email: dm.email || null,
+          phone: dm.phone || null,
+          linkedinUrl: dm.linkedinUrl || null,
+          isPrimary: true,
+          source: "google_places",
+        });
+      }
+    }
 
     if (status === "qualified") {
       const [firstStage] = await tx

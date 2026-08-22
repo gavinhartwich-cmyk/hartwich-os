@@ -50,10 +50,13 @@ export async function discoverLeads(params: DiscoverLeadsParams) {
             continue;
           }
 
+          // Enrich company data (extract decision maker, services, etc.)
+          const enrichment = await enrichCompanyFromWebsite(place.website);
+
           // Qualify based on Google reviews only (no Groq needed)
           const qualification = await qualifyLead({
             place,
-            enrichment: null, // Don't need enrichment for simple review-based qualification
+            enrichment,
             reviewSnippets: [],
             franchiseBlocklist,
           });
@@ -64,11 +67,12 @@ export async function discoverLeads(params: DiscoverLeadsParams) {
             continue;
           }
 
-          // Save to database
-          await createDiscoveredCompany({
+          // Save to database (will also create contact from enrichment)
+          const company = await createDiscoveredCompany({
             place,
             placeId: place.placeId,
             qualification,
+            enrichment, // Pass enrichment so contacts are created
           });
 
           created++;

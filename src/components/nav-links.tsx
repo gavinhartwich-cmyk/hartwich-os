@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/board", label: "Board" },
   { href: "/companies", label: "Companies" },
   { href: "/leads/review", label: "Review Queue" },
+  { href: "/outreach-suggestions", label: "AI Outreach" },
 ];
 
 export default function NavLinks() {
