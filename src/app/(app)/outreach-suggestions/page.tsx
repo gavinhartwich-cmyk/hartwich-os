@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Mail, Linkedin, Phone, MessageSquare, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Globe, Phone, MessageSquare, Loader2 } from "lucide-react";
 import { useParams } from "next/navigation";
 
 export default function OutreachSuggestionsPage() {
@@ -167,7 +167,7 @@ export default function OutreachSuggestionsPage() {
               {/* LinkedIn */}
               <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
                 <div className="mb-3 flex items-center gap-2">
-                  <Linkedin className="size-5 text-blue-700" />
+                  <Globe className="size-5 text-blue-700" />
                   <h3 className="font-semibold">LinkedIn Connection</h3>
                 </div>
                 <p className="whitespace-pre-wrap rounded bg-neutral-50 p-3 text-xs dark:bg-neutral-800">
