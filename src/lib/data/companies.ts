@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, ilike } from "drizzle-orm";
+import { asc, desc, eq, ilike, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, deals, pipelineStages } from "@/db/schema";
 
@@ -19,10 +19,19 @@ export async function listCompanies(search?: string) {
     return db
       .select()
       .from(companies)
-      .where(ilike(companies.name, `%${search.trim()}%`))
+      .where(
+        db.and(
+          ilike(companies.name, `%${search.trim()}%`),
+          ne(companies.status, "disqualified")
+        )
+      )
       .orderBy(desc(companies.createdAt));
   }
-  return db.select().from(companies).orderBy(desc(companies.createdAt));
+  return db
+    .select()
+    .from(companies)
+    .where(ne(companies.status, "disqualified"))
+    .orderBy(desc(companies.createdAt));
 }
 
 export async function getCompanyById(id: string) {

@@ -13,14 +13,12 @@ import { pipelineStages, leadSourcesConfig } from "./schema";
 
 const DEFAULT_STAGES = [
   { name: "New Lead", position: 0, isWon: false, isLost: false },
-  { name: "Researching", position: 1, isWon: false, isLost: false },
-  { name: "Qualified", position: 2, isWon: false, isLost: false },
-  { name: "Contacted", position: 3, isWon: false, isLost: false },
-  { name: "Engaged", position: 4, isWon: false, isLost: false },
-  { name: "Meeting Booked", position: 5, isWon: false, isLost: false },
-  { name: "Proposal Sent", position: 6, isWon: false, isLost: false },
-  { name: "Won", position: 7, isWon: true, isLost: false },
-  { name: "Lost", position: 8, isWon: false, isLost: true },
+  { name: "Contacted", position: 1, isWon: false, isLost: false },
+  { name: "Engaged", position: 2, isWon: false, isLost: false },
+  { name: "Meeting Booked", position: 3, isWon: false, isLost: false },
+  { name: "Proposal Sent", position: 4, isWon: false, isLost: false },
+  { name: "Won", position: 5, isWon: true, isLost: false },
+  { name: "Lost", position: 6, isWon: false, isLost: true },
 ];
 
 async function seedPipelineStages() {

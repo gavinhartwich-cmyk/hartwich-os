@@ -50,6 +50,11 @@ export default function DealCard({ deal }: { deal: BoardDeal }) {
             Tier {deal.company.contactTier}
           </span>
         )}
+        {deal.company.googleRating && (
+          <span className="rounded bg-yellow-50 px-1.5 py-0.5 text-[11px] font-medium text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400">
+            {deal.company.googleRating}★ ({deal.company.googleReviewCount || 0})
+          </span>
+        )}
       </div>
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-400">
