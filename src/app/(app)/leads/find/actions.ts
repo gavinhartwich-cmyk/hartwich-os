@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
-import { inngest } from "@/inngest/client";
+import { discoverLeads } from "@/lib/actions/discover-leads";
 
 const FindLeadsFormSchema = z.object({
   area: z.string().trim().min(1),
@@ -21,13 +21,11 @@ export async function triggerLeadDiscoveryAction(formData: FormData) {
     redirect("/leads/find?error=invalid");
   }
 
-  await inngest.send({
-    name: "leads/discover.requested",
-    data: {
-      area: parsed.data.area,
-      keyword: parsed.data.keyword || undefined,
-      requestedByUserId: user.id,
-    },
+  // Start lead discovery (returns immediately, processes in background)
+  await discoverLeads({
+    area: parsed.data.area,
+    keyword: parsed.data.keyword || undefined,
+    requestedByUserId: user.id,
   });
 
   redirect("/leads/review?started=1");
