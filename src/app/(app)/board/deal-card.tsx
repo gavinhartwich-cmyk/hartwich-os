@@ -20,6 +20,7 @@ export default function DealCard({ deal }: { deal: BoardDeal }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      suppressHydrationWarning
       style={{ transform: CSS.Translate.toString(transform) }}
       className={`touch-none rounded-md border border-neutral-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900 ${
         isDragging ? "opacity-40" : ""
