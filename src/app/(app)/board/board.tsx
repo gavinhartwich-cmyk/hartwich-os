@@ -14,10 +14,12 @@ export default function Board({
   stages,
   initialDeals,
   emailDrafts,
+  currentUserId,
 }: {
   stages: PipelineStage[];
   initialDeals: BoardDeal[];
   emailDrafts: PendingEmailDraft[];
+  currentUserId: string;
 }) {
   const [deals, setDeals] = useState(initialDeals);
   const [activeDeal, setActiveDeal] = useState<BoardDeal | null>(null);
@@ -59,7 +61,9 @@ export default function Board({
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {emailDrafts.length > 0 && <EmailReviewColumn drafts={emailDrafts} />}
+        {emailDrafts.length > 0 && (
+          <EmailReviewColumn drafts={emailDrafts} currentUserId={currentUserId} />
+        )}
         {stages.map((stage) => (
           <Column key={stage.id} stage={stage} deals={deals.filter((d) => d.stageId === stage.id)} />
         ))}

@@ -5,9 +5,10 @@ import type { PendingEmailDraft } from "@/lib/data/email-drafts";
 
 interface EmailReviewColumnProps {
   drafts: PendingEmailDraft[];
+  currentUserId: string;
 }
 
-export default function EmailReviewColumn({ drafts }: EmailReviewColumnProps) {
+export default function EmailReviewColumn({ drafts, currentUserId }: EmailReviewColumnProps) {
   const [isApproving, setIsApproving] = useState<string | null>(null);
   const [isRejecting, setIsRejecting] = useState<string | null>(null);
   const [draftList, setDraftList] = useState(drafts);
@@ -60,8 +61,7 @@ export default function EmailReviewColumn({ drafts }: EmailReviewColumnProps) {
     return null; // Hide section if no pending emails
   }
 
-  // Get userId from somewhere - for now, use a placeholder
-  const userId = "user-id-placeholder"; // TODO: Get from session/auth
+  const userId = currentUserId;
 
   return (
     <div className="flex w-72 shrink-0 flex-col">

@@ -2,13 +2,15 @@ import Link from "next/link";
 import { listPipelineStages } from "@/lib/data/pipeline-stages";
 import { listDealsForBoard } from "@/lib/data/deals";
 import { listPendingEmailDrafts } from "@/lib/data/email-drafts";
+import { getCurrentAppUser } from "@/lib/auth/current-user";
 import Board from "./board";
 
 export default async function BoardPage() {
-  const [stages, deals, emailDrafts] = await Promise.all([
+  const [stages, deals, emailDrafts, currentUser] = await Promise.all([
     listPipelineStages(),
     listDealsForBoard(),
     listPendingEmailDrafts(),
+    getCurrentAppUser(),
   ]);
 
   return (
@@ -32,7 +34,12 @@ export default async function BoardPage() {
           the default stages, then refresh.
         </p>
       ) : (
-        <Board stages={stages} initialDeals={deals} emailDrafts={emailDrafts} />
+        <Board
+          stages={stages}
+          initialDeals={deals}
+          emailDrafts={emailDrafts}
+          currentUserId={currentUser?.id ?? ""}
+        />
       )}
     </div>
   );
