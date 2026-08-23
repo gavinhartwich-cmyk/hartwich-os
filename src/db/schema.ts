@@ -311,6 +311,11 @@ export const tasks = pgTable("tasks", {
   description: text("description").notNull(),
   assignedTo: uuid("assigned_to").references(() => users.id),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // --- Calendar sync (Phase 5) ---
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  location: text("location"),
+  googleEventId: text("google_event_id"),
+  googleEventSyncedAt: timestamp("google_event_synced_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
