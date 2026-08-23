@@ -107,6 +107,19 @@ export const emailDraftStatusEnum = pgEnum("email_draft_status", [
   "sent",
 ]);
 
+export const bookingQuestionTypeEnum = pgEnum("booking_question_type", [
+  "text",
+  "textarea",
+  "email",
+  "phone",
+  "select",
+]);
+
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "confirmed",
+  "cancelled",
+]);
+
 // ---------------------------------------------------------------------------
 // users — the allow-listed admin accounts (see §4 of the architecture doc)
 // ---------------------------------------------------------------------------
@@ -381,6 +394,74 @@ export const emailDrafts = pgTable("email_drafts", {
 });
 
 // ---------------------------------------------------------------------------
+// booking_settings — single-row config for the public /book page (Phase 6).
+// Gavin-only: how far out prospects can book, meeting length, working
+// hours/days used to generate open slots (on top of real Google Calendar
+// busy time).
+// ---------------------------------------------------------------------------
+
+export const bookingSettings = pgTable("booking_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingWindowDays: integer("booking_window_days").notNull().default(30),
+  meetingDurationMinutes: integer("meeting_duration_minutes").notNull().default(30),
+  minNoticeHours: integer("min_notice_hours").notNull().default(4),
+  timezone: text("timezone").notNull().default("America/Winnipeg"),
+  // 0 = Sunday ... 6 = Saturday
+  workingDays: jsonb("working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
+  workingHoursStart: text("working_hours_start").notNull().default("09:00"),
+  workingHoursEnd: text("working_hours_end").notNull().default("17:00"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// booking_questions — the customizable questionnaire shown after a prospect
+// picks a time. Three "core" rows (name/email/phone) are seeded and can't
+// be deleted from the UI since reminders depend on them; anything else is
+// free-form and fully editable (Phase 6).
+// ---------------------------------------------------------------------------
+
+export const bookingQuestions = pgTable("booking_questions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: text("label").notNull(),
+  fieldType: bookingQuestionTypeEnum("field_type").notNull().default("text"),
+  options: jsonb("options").$type<string[]>(),
+  required: boolean("required").notNull().default(true),
+  isCore: boolean("is_core").notNull().default(false),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// bookings — a confirmed slot on the public /book page (Phase 6). Optionally
+// linked back to a company/contact/deal when the link was sent from the CRM
+// (?company=&contact=&deal= query params), but works as a bare public link
+// too. answers stores the full questionnaire response keyed by question id;
+// prospectName/Email/Phone are pulled out of the core answers at booking
+// time so reminders don't need to re-parse the jsonb blob.
+// ---------------------------------------------------------------------------
+
+export const bookings = pgTable("bookings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
+  prospectName: text("prospect_name").notNull(),
+  prospectEmail: text("prospect_email").notNull(),
+  prospectPhone: text("prospect_phone"),
+  answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  status: bookingStatusEnum("status").notNull().default("confirmed"),
+  googleEventId: text("google_event_id"),
+  emailReminder24hSentAt: timestamp("email_reminder_24h_sent_at", { withTimezone: true }),
+  emailReminder1hSentAt: timestamp("email_reminder_1h_sent_at", { withTimezone: true }),
+  smsReminder24hSentAt: timestamp("sms_reminder_24h_sent_at", { withTimezone: true }),
+  smsReminder1hSentAt: timestamp("sms_reminder_1h_sent_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // audit_log — who (or which AI run) changed what
 // ---------------------------------------------------------------------------
 
@@ -460,4 +541,10 @@ export const emailDraftsRelations = relations(emailDrafts, ({ one }) => ({
   approver: one(users, { fields: [emailDrafts.approvedBy], references: [users.id] }),
   rejecter: one(users, { fields: [emailDrafts.rejectedBy], references: [users.id] }),
   message: one(messages, { fields: [emailDrafts.messageId], references: [messages.id] }),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  company: one(companies, { fields: [bookings.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [bookings.contactId], references: [contacts.id] }),
+  deal: one(deals, { fields: [bookings.dealId], references: [deals.id] }),
 }));

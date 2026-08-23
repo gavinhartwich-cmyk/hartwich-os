@@ -44,6 +44,8 @@ export type CalendarEventInput = {
   location?: string | null;
   startTime: Date;
   durationMinutes: number;
+  attendeeEmail?: string | null;
+  attendeeName?: string | null;
 };
 
 /**
@@ -64,18 +66,57 @@ export async function createCalendarEvent(
 
     const response = await calendar.events.insert({
       calendarId: "primary",
+      sendUpdates: input.attendeeEmail ? "all" : "none",
       requestBody: {
         summary: input.title,
         description: input.description || undefined,
         location: input.location || undefined,
         start: { dateTime: input.startTime.toISOString() },
         end: { dateTime: endTime.toISOString() },
+        attendees: input.attendeeEmail
+          ? [{ email: input.attendeeEmail, displayName: input.attendeeName || undefined }]
+          : undefined,
       },
     });
 
     return response.data.id || null;
   } catch (error) {
     console.error("Failed to create Google Calendar event:", error);
+    return null;
+  }
+}
+
+export type BusyPeriod = { start: Date; end: Date };
+
+/**
+ * Reads Gavin's real busy blocks off his primary calendar for a window
+ * (Phase 6 booking availability). Returns null when Calendar sync isn't
+ * configured — callers should treat that as "can't compute real
+ * availability yet" and fail closed (show no slots), not fall back to
+ * pretending the whole window is free.
+ */
+export async function getBusyPeriods(
+  timeMin: Date,
+  timeMax: Date
+): Promise<BusyPeriod[] | null> {
+  if (!isConfigured()) return null;
+
+  try {
+    const calendar = getCalendarClient();
+    const response = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        items: [{ id: "primary" }],
+      },
+    });
+
+    const busy = response.data.calendars?.primary?.busy || [];
+    return busy
+      .filter((b) => b.start && b.end)
+      .map((b) => ({ start: new Date(b.start!), end: new Date(b.end!) }));
+  } catch (error) {
+    console.error("Failed to read Google Calendar free/busy:", error);
     return null;
   }
 }
