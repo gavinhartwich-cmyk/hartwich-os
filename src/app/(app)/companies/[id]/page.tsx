@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/data/companies";
 import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
+import { getCurrentAppUser } from "@/lib/auth/current-user";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
 import ContactsPanel from "./contacts-panel";
 import ActivityPanel from "./activity-panel";
+import OutreachPanel from "./outreach-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
 export default async function CompanyDetailPage({
@@ -15,10 +17,11 @@ export default async function CompanyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [company, contacts, activities] = await Promise.all([
+  const [company, contacts, activities, currentUser] = await Promise.all([
     getCompanyById(id),
     listContactsForCompany(id),
     listActivitiesForCompany(id),
+    getCurrentAppUser(),
   ]);
   if (!company) notFound();
 
@@ -116,6 +119,22 @@ export default async function CompanyDetailPage({
         <ActivityPanel companyId={company.id} activities={activities} contacts={contacts} />
         <ContactsPanel companyId={company.id} contacts={contacts} />
       </div>
+
+      {currentUser && (
+        <OutreachPanel
+          companyId={company.id}
+          currentUserId={currentUser.id}
+          contacts={contacts}
+          research={{
+            googleRating: company.googleRating,
+            googleReviewCount: company.googleReviewCount,
+            isOwnerOperated: company.isOwnerOperated,
+            qualificationReasoning: company.qualificationReasoning,
+            websiteSummary: company.websiteSummary,
+            servicesOffered: company.servicesOffered,
+          }}
+        />
+      )}
     </div>
   );
 }

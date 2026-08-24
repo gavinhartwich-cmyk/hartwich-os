@@ -9,12 +9,18 @@ import { eq } from "drizzle-orm";
 const ApproveAndSendSchema = z.object({
   emailDraftId: z.string().uuid(),
   userId: z.string().uuid(),
+  // Optional edits made after the draft was generated (e.g. from the
+  // company page's inline review step) — sent instead of the stored
+  // subject/body when present, and persisted onto the draft for the audit trail.
+  subject: z.string().trim().min(1).optional(),
+  body: z.string().trim().min(1).optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { emailDraftId, userId } = ApproveAndSendSchema.parse(body);
+    const { emailDraftId, userId, subject: subjectOverride, body: bodyOverride } =
+      ApproveAndSendSchema.parse(body);
 
     // Fetch email draft
     const draft = await db.query.emailDrafts.findFirst({
@@ -58,9 +64,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Final subject/body — the edited version if the reviewer changed
+    // anything before sending, otherwise the original AI draft.
+    const finalSubject = subjectOverride ?? draft.subject;
+    const finalBody = bodyOverride ?? draft.body;
+
     // Rotate email account
     const nextAccountIndex = rotateEmailAccount(
-      dailySendCount > 0 
+      dailySendCount > 0
         ? (Math.floor(Math.random() * 3) as any)
         : undefined
     );
@@ -68,8 +79,8 @@ export async function POST(request: NextRequest) {
     // Send via Gmail
     const { messageId, fromAddress } = await sendEmailViaGmail({
       to: draft.contact.email!,
-      subject: draft.subject,
-      body: draft.body,
+      subject: finalSubject,
+      body: finalBody,
       accountIndex: nextAccountIndex,
     });
 
@@ -82,7 +93,7 @@ export async function POST(request: NextRequest) {
         dealId: draft.dealId || undefined,
         type: "email",
         direction: "outbound",
-        bodyText: draft.body,
+        bodyText: finalBody,
         aiGenerated: !!draft.aiRunId,
         createdBy: userId,
       })
@@ -98,17 +109,19 @@ export async function POST(request: NextRequest) {
         status: "sent",
         toAddress: draft.contact.email!,
         fromAddress,
-        subject: draft.subject,
-        body: draft.body,
+        subject: finalSubject,
+        body: finalBody,
         generatedByAi: !!draft.aiRunId,
         aiPromptVersion: draft.aiRunId || undefined,
       })
       .returning();
 
-    // Update email draft status
+    // Update email draft status (persisting any edits for the audit trail)
     await db
       .update(emailDrafts)
       .set({
+        subject: finalSubject,
+        body: finalBody,
         status: "sent",
         approvedBy: userId,
         approvedAt: new Date(),

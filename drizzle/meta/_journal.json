@@ -15,6 +15,13 @@
       "when": 1787523450395,
       "tag": "0001_nervous_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787538789003,
+      "tag": "0002_brainy_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

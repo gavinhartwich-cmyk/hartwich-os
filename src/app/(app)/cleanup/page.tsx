@@ -183,11 +183,9 @@ export default function CleanupPage() {
                   to discover HVAC companies
                 </li>
                 <li>
-                  2. Use{" "}
-                  <Link href="/outreach-suggestions" className="text-blue-600 hover:underline">
-                    AI Outreach
-                  </Link>{" "}
-                  to generate personalized messages
+                  2. Open a qualified company and use{" "}
+                  <span className="font-medium">Draft outreach email</span> on its page — it
+                  writes from that company&apos;s own research, no separate tool needed
                 </li>
                 <li>3. Send cold emails and track responses</li>
               </ol>

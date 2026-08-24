@@ -211,6 +211,9 @@ export async function createDiscoveredCompany(input: DiscoveredCompanyInput) {
         qualificationScore: input.qualification.score,
         qualificationReasoning: input.qualification.reasoning,
         disqualifyReason: input.qualification.disqualifyReason,
+        websiteSummary: input.enrichment?.summary || null,
+        servicesOffered: input.enrichment?.servicesOffered || null,
+        apparentSize: input.enrichment?.apparentSize || null,
         status,
       })
       .returning();

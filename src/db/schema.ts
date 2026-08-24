@@ -177,6 +177,14 @@ export const companies = pgTable("companies", {
   contactTier: contactTierEnum("contact_tier"),
   qualificationScore: integer("qualification_score"), // 0–100
   qualificationReasoning: text("qualification_reasoning"),
+
+  // --- Website enrichment (Phase 2 "Enrich" step) — captured once at
+  // discovery time so outreach drafting can reference real research
+  // about the business instead of a generic template. Null for leads
+  // discovered before this field existed, or with no website to read.
+  websiteSummary: text("website_summary"),
+  servicesOffered: jsonb("services_offered").$type<string[]>(),
+  apparentSize: text("apparent_size"),
   disqualifyReason: text("disqualify_reason"),
   status: companyStatusEnum("status").notNull().default("needs_review"),
 
