@@ -16,7 +16,8 @@
  *
  *   NODE_OPTIONS=--conditions=react-server npx tsx scripts/backfill-contacts.ts [--dry-run]
  */
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import { companies, contacts } from "../src/db/schema";
