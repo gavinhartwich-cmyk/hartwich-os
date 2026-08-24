@@ -218,21 +218,26 @@ export async function createDiscoveredCompany(input: DiscoveredCompanyInput) {
       })
       .returning();
 
-    // Create contact from enrichment's decision maker info
-    if (input.enrichment?.decisionMaker) {
-      const dm = input.enrichment.decisionMaker;
-      if (dm.name || dm.email || dm.phone || dm.linkedinUrl) {
-        await tx.insert(contacts).values({
-          companyId: company.id,
-          name: dm.name || null,
-          title: dm.title || null,
-          email: dm.email || null,
-          phone: dm.phone || null,
-          linkedinUrl: dm.linkedinUrl || null,
-          isPrimary: true,
-          source: "google_places",
-        });
-      }
+    // Create a contact from whatever enrichment found. Prefer the named
+    // decision-maker's own email; when the LLM found a person but no email
+    // for them (common — most small-business sites don't put an owner's
+    // email next to their name) or found no named contact at all, fall back
+    // to the mailbox scraped straight off the page (see extractFallbackEmail
+    // in enrich-company.ts) so there's still something to send outreach to
+    // instead of leaving the user to go find an email by hand.
+    const en = input.enrichment;
+    const email = en?.contactEmail || en?.fallbackEmail || null;
+    if (en?.contactName || email || en?.contactPhone || en?.contactLinkedinUrl) {
+      await tx.insert(contacts).values({
+        companyId: company.id,
+        name: en?.contactName || null,
+        title: en?.contactTitle || (!en?.contactName && email ? "General inquiries" : null),
+        email,
+        phone: en?.contactPhone || null,
+        linkedinUrl: en?.contactLinkedinUrl || null,
+        isPrimary: true,
+        source: "google_places",
+      });
     }
 
     if (status === "qualified") {
