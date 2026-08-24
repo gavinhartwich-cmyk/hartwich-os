@@ -12,17 +12,17 @@ export default async function NewCompanyPage({
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6">
-        <Link href="/companies" className="text-sm text-neutral-500 hover:underline">
+        <Link href="/companies" className="text-sm text-[var(--muted)] hover:text-white/80 hover:underline">
           ← Companies
         </Link>
-        <h1 className="mt-1 text-xl font-semibold">New company</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="mt-1 text-xl font-light tracking-tight text-white">New company</h1>
+        <p className="text-sm text-[var(--muted)]">
           Adds the company and drops it into the first pipeline stage.
         </p>
       </div>
 
       {error && (
-        <p className="mb-4 rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+        <p className="mb-4 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-2 text-sm text-red-300">
           Company name is required.
         </p>
       )}
@@ -38,21 +38,13 @@ export default async function NewCompanyPage({
           <FormField label="ZIP" name="postalCode" />
         </div>
         <div>
-          <label htmlFor="notes" className="mb-1 block text-sm font-medium">
+          <label htmlFor="notes" className="mb-1 block text-sm font-medium text-white/80">
             Notes
           </label>
-          <textarea
-            id="notes"
-            name="notes"
-            rows={3}
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          />
+          <textarea id="notes" name="notes" rows={3} className="input-field" />
         </div>
 
-        <button
-          type="submit"
-          className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
+        <button type="submit" className="btn-primary w-full">
           Create company
         </button>
       </form>

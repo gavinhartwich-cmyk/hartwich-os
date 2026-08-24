@@ -133,21 +133,21 @@ export default function CalendarClient({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setMonthKey((m) => shiftMonth(m, -1))}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="btn-secondary px-2 py-1"
           >
             ←
           </button>
           <span className="w-40 text-center text-sm font-medium">{monthLabel}</span>
           <button
             onClick={() => setMonthKey((m) => shiftMonth(m, 1))}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="btn-secondary px-2 py-1"
           >
             →
           </button>
         </div>
         <button
           onClick={() => setShowForm((s) => !s)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="btn-primary"
         >
           {showForm ? "Cancel" : "+ New"}
         </button>
@@ -156,47 +156,47 @@ export default function CalendarClient({
       {showForm && (
         <form
           action={handleCreate}
-          className="mb-6 space-y-3 rounded-md border border-neutral-200 p-4 dark:border-neutral-800"
+          className="mb-6 space-y-3 surface-card p-4"
         >
           <div>
-            <label className="mb-1 block text-sm font-medium">What</label>
+            <label className="mb-1 block text-sm font-medium text-[var(--muted)]">What</label>
             <input
               name="description"
               required
               autoFocus
               placeholder="Call with ABC HVAC — pricing follow-up"
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="input-field"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">When</label>
+              <label className="mb-1 block text-sm font-medium text-[var(--muted)]">When</label>
               <input
                 type="datetime-local"
                 name="dueDate"
                 required
                 defaultValue={toLocalDatetimeInputValue(new Date())}
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="input-field"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Duration (min)</label>
+              <label className="mb-1 block text-sm font-medium text-[var(--muted)]">Duration (min)</label>
               <input
                 type="number"
                 name="durationMinutes"
                 defaultValue={30}
                 min={5}
                 step={5}
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="input-field"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">Company (optional)</label>
+              <label className="mb-1 block text-sm font-medium text-[var(--muted)]">Company (optional)</label>
               <select
                 name="companyId"
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="input-field"
               >
                 <option value="">—</option>
                 {companies.map((c) => (
@@ -207,15 +207,15 @@ export default function CalendarClient({
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Location (optional)</label>
+              <label className="mb-1 block text-sm font-medium text-[var(--muted)]">Location (optional)</label>
               <input
                 name="location"
                 placeholder="Phone, Zoom, address..."
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                className="input-field"
               />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+          <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
             <input
               type="checkbox"
               name="syncToCalendar"
@@ -227,7 +227,7 @@ export default function CalendarClient({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="btn-primary"
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -235,23 +235,23 @@ export default function CalendarClient({
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Loading...</p>
+        <p className="text-sm text-[var(--muted)]">Loading...</p>
       ) : Object.keys(grouped).length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500 dark:border-neutral-700">
+        <p className="surface-card border-dashed p-6 text-sm text-[var(--muted)]">
           Nothing on the calendar this month.
         </p>
       ) : (
         <div className="space-y-6">
           {Object.entries(grouped).map(([day, dayTasks]) => (
             <div key={day}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 {day}
               </h2>
               <div className="space-y-2">
                 {dayTasks.map((task) => (
                   <div
                     key={task.id}
-                    className={`flex items-center justify-between rounded-md border border-neutral-200 p-3 dark:border-neutral-800 ${
+                    className={`flex items-center justify-between surface-card p-3 ${
                       task.completedAt ? "opacity-50" : ""
                     }`}
                   >
@@ -259,12 +259,12 @@ export default function CalendarClient({
                       <p className="text-sm font-medium">
                         {task.description}
                         {task.googleEventId && (
-                          <span className="ml-2 text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                          <span className="ml-2 text-xs font-normal text-emerald-400">
                             ✓ synced
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-[var(--muted-2)]">
                         {new Date(task.dueDate).toLocaleTimeString("en-US", {
                           hour: "numeric",
                           minute: "2-digit",

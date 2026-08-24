@@ -19,7 +19,7 @@ export default async function BookingSettingsPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Booking</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--muted)]">
           Your public booking link, availability rules, and the questionnaire prospects fill out.
         </p>
       </div>

@@ -26,13 +26,13 @@ export default async function CompanyDetailPage({
   if (!company) notFound();
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <Link href="/companies" className="text-sm text-neutral-500 hover:underline">
+    <div className="mx-auto max-w-3xl fade-in">
+      <Link href="/companies" className="text-sm text-[var(--muted)] transition-colors hover:text-white">
         ← Companies
       </Link>
 
       <div className="mt-1 mb-6 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">{company.name}</h1>
+        <h1 className="text-xl font-light tracking-tight text-white">{company.name}</h1>
         <StatusBadge status={company.status} />
       </div>
 
@@ -49,7 +49,7 @@ export default async function CompanyDetailPage({
             <FormField label="ZIP" name="postalCode" defaultValue={company.postalCode} />
           </div>
           <div>
-            <label htmlFor="notes" className="mb-1 block text-sm font-medium">
+            <label htmlFor="notes" className="mb-1 block text-sm font-medium text-[var(--muted)]">
               Notes
             </label>
             <textarea
@@ -57,51 +57,45 @@ export default async function CompanyDetailPage({
               name="notes"
               rows={4}
               defaultValue={company.notes ?? ""}
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="input-field"
             />
           </div>
-          <button
-            type="submit"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-          >
+          <button type="submit" className="btn-primary">
             Save changes
           </button>
         </form>
 
         <aside>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">Deals</h2>
+            <h2 className="text-sm font-semibold text-white/80">Deals</h2>
             <form action={createDealAction}>
-              <input type="hidden" name="companyId" value={company.id} />
-              <button type="submit" className="text-xs font-medium text-neutral-500 hover:underline">
+              <button type="submit" className="btn-ghost text-xs">
                 + New deal
               </button>
+              <input type="hidden" name="companyId" value={company.id} />
             </form>
           </div>
 
           <ul className="mt-3 space-y-2">
             {company.deals.length === 0 && (
-              <li className="text-sm text-neutral-400">No deals yet.</li>
+              <li className="text-sm text-[var(--muted-2)]">No deals yet.</li>
             )}
             {company.deals.map((deal) => (
-              <li
-                key={deal.id}
-                className="rounded-md border border-neutral-200 p-2.5 text-sm dark:border-neutral-800"
-              >
+              <li key={deal.id} className="surface-card p-2.5 text-sm">
                 <div className="flex items-center justify-between">
                   <span
                     className={
                       deal.stage.isWon
-                        ? "font-medium text-emerald-700 dark:text-emerald-400"
+                        ? "font-medium text-emerald-400"
                         : deal.stage.isLost
-                          ? "font-medium text-neutral-400"
-                          : "font-medium"
+                          ? "font-medium text-[var(--muted-2)]"
+                          : "font-medium text-white/90"
                     }
                   >
                     {deal.stage.name}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-neutral-400">
+                <p className="mt-0.5 text-xs text-[var(--muted-2)]">
                   {deal.owner?.name ?? "Unassigned"} ·{" "}
                   {new Date(deal.createdAt).toLocaleDateString()}
                 </p>
@@ -109,7 +103,10 @@ export default async function CompanyDetailPage({
             ))}
           </ul>
 
-          <Link href="/board" className="mt-3 inline-block text-xs text-neutral-500 hover:underline">
+          <Link
+            href="/board"
+            className="mt-3 inline-block text-xs text-[var(--muted)] transition-colors hover:text-white"
+          >
             View on board →
           </Link>
         </aside>

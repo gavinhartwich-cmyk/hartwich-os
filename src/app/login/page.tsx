@@ -11,14 +11,14 @@ function LoginError() {
 
   if (error === "not_allowed") {
     return (
-      <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
         That account isn&apos;t authorized for Hartwich OS.
       </p>
     );
   }
   if (error === "auth_failed") {
     return (
-      <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
         Sign-in failed. Please try again.
       </p>
     );
@@ -58,13 +58,9 @@ function LoginForm() {
       <FormField label="Email" name="email" type="email" required autoFocus />
       <FormField label="Password" name="password" type="password" required />
 
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <button type="submit" disabled={submitting} className="btn-primary w-full">
         {submitting ? "Signing in…" : "Sign in"}
       </button>
     </form>
@@ -73,11 +69,20 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
-      <div className="w-full max-w-sm space-y-6 text-center">
+    <main className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden bg-[var(--background)] px-4">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,255,255,0.08), transparent)",
+        }}
+      />
+      <div className="fade-in surface-card relative w-full max-w-sm space-y-6 p-8 text-center">
         <div>
-          <h1 className="text-2xl font-semibold">Hartwich OS</h1>
-          <p className="mt-1 text-sm text-neutral-500">Internal sales operating system</p>
+          <h1 className="text-2xl font-light tracking-tight text-white">
+            Hartwich <span className="text-white/40">OS</span>
+          </h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">Internal sales operating system</p>
         </div>
 
         <Suspense fallback={null}>
@@ -86,9 +91,7 @@ export default function LoginPage() {
 
         <LoginForm />
 
-        <p className="text-xs text-neutral-400">
-          Access is limited to Hartwich Labs admins.
-        </p>
+        <p className="text-xs text-white/25">Access is limited to Hartwich Labs admins.</p>
       </div>
     </main>
   );

@@ -17,19 +17,16 @@ export default async function BoardPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Pipeline</h1>
-          <p className="text-sm text-neutral-500">Drag a card to move it between stages.</p>
+          <h1 className="text-xl font-light tracking-tight text-white">Pipeline</h1>
+          <p className="text-sm text-[var(--muted)]">Drag a card to move it between stages.</p>
         </div>
-        <Link
-          href="/companies/new"
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
+        <Link href="/companies/new" className="btn-primary">
           + New Company
         </Link>
       </div>
 
       {stages.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500">
+        <p className="surface-card border-dashed p-6 text-sm text-[var(--muted)]">
           No pipeline stages found. Run <code className="font-mono">npm run db:seed</code> to create
           the default stages, then refresh.
         </p>

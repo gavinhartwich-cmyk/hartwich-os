@@ -18,7 +18,7 @@ export default function SignOutButton({ className }: { className?: string }) {
       onClick={signOut}
       className={
         className ??
-        "w-fit rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+        "btn-secondary w-fit"
       }
     >
       Sign out

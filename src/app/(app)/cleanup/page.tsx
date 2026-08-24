@@ -68,61 +68,61 @@ export default function CleanupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-neutral-50 to-neutral-100 p-6 dark:from-neutral-900 dark:to-neutral-950">
-      <div className="mx-auto max-w-3xl">
+    <div className="min-h-screen p-6">
+      <div className="mx-auto max-w-3xl fade-in">
         {/* Header */}
         <div className="mb-8 flex items-center gap-4">
-          <Link href="/board" className="rounded-lg p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800">
+          <Link href="/board" className="btn-ghost rounded-lg p-2">
             <ArrowLeft className="size-5" />
           </Link>
-          <h1 className="text-3xl font-bold">Database Cleanup</h1>
+          <h1 className="text-3xl font-light tracking-tight text-white">Database Cleanup</h1>
         </div>
 
         {!done ? (
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-green-600 dark:text-green-400">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-emerald-400">
                   Qualified Leads
                 </p>
-                <p className="mt-1 text-3xl font-bold text-green-900 dark:text-green-100">
+                <p className="mt-1 text-3xl font-light text-white">
                   {stats?.qualified || 0}
                 </p>
-                <p className="mt-1 text-xs text-green-700 dark:text-green-300">Ready to board</p>
+                <p className="mt-1 text-xs text-emerald-300/70">Ready to board</p>
               </div>
 
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-yellow-600 dark:text-yellow-400">
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-amber-400">
                   Needs Review
                 </p>
-                <p className="mt-1 text-3xl font-bold text-yellow-900 dark:text-yellow-100">
+                <p className="mt-1 text-3xl font-light text-white">
                   {stats?.needsReview || 0}
                 </p>
-                <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">Kept — awaiting your review</p>
+                <p className="mt-1 text-xs text-amber-300/70">Kept — awaiting your review</p>
               </div>
 
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-red-600 dark:text-red-400">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-red-400">
                   Disqualified
                 </p>
-                <p className="mt-1 text-3xl font-bold text-red-900 dark:text-red-100">
+                <p className="mt-1 text-3xl font-light text-white">
                   {stats?.disqualified || 0}
                 </p>
-                <p className="mt-1 text-xs text-red-700 dark:text-red-300">Will be deleted</p>
+                <p className="mt-1 text-xs text-red-300/70">Will be deleted</p>
               </div>
             </div>
 
             {/* Summary */}
-            <div className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-900">
+            <div className="surface-card p-6">
               <div className="flex gap-4">
-                <AlertTriangle className="size-6 shrink-0 text-amber-600" />
+                <AlertTriangle className="size-6 shrink-0 text-amber-400" />
                 <div>
-                  <h2 className="font-semibold">Clean Reset</h2>
-                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  <h2 className="font-semibold text-white">Clean Reset</h2>
+                  <p className="mt-1 text-sm text-white/70">
                     This will permanently delete <strong>{stats?.disqualified || 0}</strong> disqualified leads.
                   </p>
-                  <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+                  <p className="mt-2 text-sm text-white/70">
                     <strong>{stats?.qualified || 0}</strong> qualified leads and{" "}
                     <strong>{stats?.needsReview || 0}</strong> awaiting review will be kept.
                   </p>
@@ -135,7 +135,7 @@ export default function CleanupPage() {
               <button
                 onClick={runCleanup}
                 disabled={cleaning || !stats || stats.disqualified === 0}
-                className="rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-red-500 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:scale-[1.02] hover:bg-red-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
               >
                 {cleaning ? (
                   <>
@@ -148,24 +148,24 @@ export default function CleanupPage() {
               </button>
               <Link
                 href="/board"
-                className="rounded-md border border-neutral-300 px-4 py-2 font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                className="btn-secondary"
               >
                 Cancel
               </Link>
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 fade-in">
             {/* Success Message */}
-            <div className="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-900 dark:bg-green-950">
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-6">
               <div className="flex gap-4">
-                <CheckCircle className="size-6 shrink-0 text-green-600" />
+                <CheckCircle className="size-6 shrink-0 text-emerald-400" />
                 <div>
-                  <h2 className="font-semibold text-green-900 dark:text-green-100">Cleanup Complete</h2>
-                  <p className="mt-1 text-sm text-green-700 dark:text-green-300">
+                  <h2 className="font-semibold text-white">Cleanup Complete</h2>
+                  <p className="mt-1 text-sm text-emerald-300/80">
                     Deleted <strong>{deletedCount}</strong> leads. Your database is now clean.
                   </p>
-                  <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+                  <p className="mt-2 text-sm text-emerald-300/80">
                     You have <strong>{stats?.qualified || 0}</strong> qualified leads on your board ready to outreach.
                   </p>
                 </div>
@@ -173,19 +173,19 @@ export default function CleanupPage() {
             </div>
 
             {/* Next Steps */}
-            <div className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-900">
-              <h3 className="font-semibold">Next Steps</h3>
-              <ol className="mt-3 space-y-2 text-sm">
+            <div className="surface-card p-6">
+              <h3 className="font-semibold text-white">Next Steps</h3>
+              <ol className="mt-3 space-y-2 text-sm text-white/70">
                 <li>
                   1. Visit{" "}
-                  <Link href="/leads/find" className="text-blue-600 hover:underline">
+                  <Link href="/leads/find" className="text-white underline underline-offset-2 hover:text-white/80">
                     Find Leads
                   </Link>{" "}
                   to discover HVAC companies
                 </li>
                 <li>
                   2. Open a qualified company and use{" "}
-                  <span className="font-medium">Draft outreach email</span> on its page — it
+                  <span className="font-medium text-white">Draft outreach email</span> on its page — it
                   writes from that company&apos;s own research, no separate tool needed
                 </li>
                 <li>3. Send cold emails and track responses</li>
@@ -193,10 +193,7 @@ export default function CleanupPage() {
             </div>
 
             {/* Back to Board */}
-            <Link
-              href="/board"
-              className="block rounded-md bg-neutral-900 px-4 py-2 text-center font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            >
+            <Link href="/board" className="btn-primary block text-center">
               Back to Board
             </Link>
           </div>

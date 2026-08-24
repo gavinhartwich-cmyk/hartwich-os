@@ -91,20 +91,20 @@ export default function OutreachPanel({
 
   return (
     <section className="mt-8">
-      <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+      <h2 className="text-sm font-semibold text-white/80">
         Draft outreach email
       </h2>
 
       {emailable.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-400">
+        <p className="mt-2 text-sm text-[var(--muted-2)]">
           Add a contact with an email address to draft outreach.
         </p>
       ) : (
-        <div className="mt-3 space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div className="mt-3 space-y-4 surface-card p-4">
           <div>
-            <p className="mb-1 text-xs font-medium text-neutral-500">What the draft will use</p>
+            <p className="mb-1 text-xs font-medium text-[var(--muted)]">What the draft will use</p>
             {hasResearch ? (
-              <ul className="space-y-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <ul className="space-y-0.5 text-xs text-[var(--muted-2)]">
                 {(research.googleRating || research.googleReviewCount) && (
                   <li>
                     {research.googleRating ? `${research.googleRating}★` : "Unrated"} on Google
@@ -121,7 +121,7 @@ export default function OutreachPanel({
                 )}
               </ul>
             ) : (
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-[var(--muted-2)]">
                 No research on file yet — the draft will be more generic. Discovery-sourced leads
                 pick this up automatically.
               </p>
@@ -129,11 +129,11 @@ export default function OutreachPanel({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">To</label>
+            <label className="mb-1 block text-sm font-medium text-[var(--muted)]">To</label>
             <select
               value={contactId}
               onChange={(e) => setContactId(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-full input-field"
             >
               {emailable.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -144,21 +144,21 @@ export default function OutreachPanel({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Specific angle <span className="text-neutral-400">(optional)</span>
+            <label className="mb-1 block text-sm font-medium text-[var(--muted)]">
+              Specific angle <span className="text-[var(--muted-2)]">(optional)</span>
             </label>
             <textarea
               value={angle}
               onChange={(e) => setAngle(e.target.value)}
               placeholder="e.g. mention their weekend availability"
               rows={2}
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="input-field"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
           {sentAt && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-sm text-emerald-400">
               Sent at {sentAt.toLocaleTimeString()}.
             </p>
           )}
@@ -167,34 +167,34 @@ export default function OutreachPanel({
             <button
               onClick={handleDraft}
               disabled={drafting || !contactId}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              className="btn-primary"
             >
               {drafting ? "Drafting…" : "Draft with AI"}
             </button>
           ) : (
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-neutral-500">Subject</label>
+                <label className="mb-1 block text-xs font-semibold text-[var(--muted)]">Subject</label>
                 <input
                   type="text"
                   value={draft.subject}
                   onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                  className="input-field"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-neutral-500">Body</label>
+                <label className="mb-1 block text-xs font-semibold text-[var(--muted)]">Body</label>
                 <textarea
                   value={draft.body}
                   onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                   rows={8}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                  className="input-field"
                 />
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setDraft(null)}
-                  className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  className="btn-secondary"
                 >
                   Discard
                 </button>

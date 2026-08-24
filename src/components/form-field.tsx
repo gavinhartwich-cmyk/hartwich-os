@@ -23,9 +23,9 @@ export default function FormField({
 }) {
   return (
     <div>
-      <label htmlFor={name} className="mb-1 block text-sm font-medium">
+      <label htmlFor={name} className="mb-1 block text-sm font-medium text-white/80">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-red-400"> *</span>}
       </label>
       <input
         id={name}
@@ -37,9 +37,9 @@ export default function FormField({
         defaultValue={defaultValue ?? ""}
         min={min}
         max={max}
-        className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        className="input-field"
       />
-      {hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>}
     </div>
   );
 }

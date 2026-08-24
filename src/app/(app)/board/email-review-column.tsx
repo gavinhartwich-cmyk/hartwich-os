@@ -66,41 +66,32 @@ export default function EmailReviewColumn({ drafts, currentUserId }: EmailReview
   return (
     <div className="flex w-72 shrink-0 flex-col">
       <div className="mb-2 flex items-baseline justify-between px-1">
-        <h2 className="text-sm font-semibold text-amber-700 dark:text-amber-400">Email Review</h2>
-        <span className="text-xs text-neutral-400">{draftList.length}</span>
+        <h2 className="text-sm font-medium text-amber-300">Email Review</h2>
+        <span className="text-xs text-white/30">{draftList.length}</span>
       </div>
-      <div className="flex min-h-[120px] flex-1 flex-col gap-2 rounded-lg border border-dashed border-amber-200 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950">
+      <div className="flex min-h-[120px] flex-1 flex-col gap-2 rounded-xl border border-dashed border-amber-400/25 bg-amber-400/[0.04] p-2">
         {draftList.map((draft) => (
-          <div
-            key={draft.id}
-            className="rounded-md border border-amber-300 bg-white p-3 shadow-sm dark:border-amber-800 dark:bg-neutral-900"
-          >
+          <div key={draft.id} className="surface-card border-amber-400/15 p-3">
             <div className="mb-2">
-              <p className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                {draft.companyName}
-              </p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="text-xs font-medium text-white/70">{draft.companyName}</p>
+              <p className="text-xs text-[var(--muted)]">
                 To: {draft.contactName} ({draft.contactEmail})
               </p>
-              <p className="mt-1 text-xs font-medium text-neutral-700 dark:text-neutral-200">
-                {draft.subject}
-              </p>
-              <p className="mt-1 line-clamp-2 text-xs text-neutral-600 dark:text-neutral-400">
-                {draft.body}
-              </p>
+              <p className="mt-1 text-xs font-medium text-white/85">{draft.subject}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{draft.body}</p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => handleApprove(draft.id, userId)}
                 disabled={isApproving === draft.id || isRejecting === draft.id}
-                className="flex-1 rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="flex-1 rounded-full bg-emerald-400/15 px-2 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-400/25 transition-colors duration-200 hover:bg-emerald-400/25 disabled:opacity-50"
               >
                 {isApproving === draft.id ? "Sending..." : "Approve"}
               </button>
               <button
                 onClick={() => handleReject(draft.id, userId)}
                 disabled={isApproving === draft.id || isRejecting === draft.id}
-                className="flex-1 rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 rounded-full bg-red-400/15 px-2 py-1 text-xs font-medium text-red-300 ring-1 ring-inset ring-red-400/25 transition-colors duration-200 hover:bg-red-400/25 disabled:opacity-50"
               >
                 {isRejecting === draft.id ? "Rejecting..." : "Reject"}
               </button>

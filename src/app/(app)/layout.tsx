@@ -17,20 +17,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      <header className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="min-h-screen bg-[var(--background)]">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-black/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-6">
-            <span className="text-sm font-semibold tracking-tight">Hartwich OS</span>
+            <span className="text-sm font-medium tracking-tight text-white/90">
+              Hartwich <span className="text-white/40">OS</span>
+            </span>
             <NavLinks showBookingAdmin={isBookingAdmin(user.email)} />
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-neutral-500">{user.name}</span>
-            <SignOutButton className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white" />
+            <span className="text-sm text-[var(--muted)]">{user.name}</span>
+            <SignOutButton className="btn-ghost" />
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="fade-in mx-auto max-w-6xl px-6 py-8">{children}</main>
     </div>
   );
 }

@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
+/*
+ * Hartwich OS — dark futuristic theme.
+ * Always-dark, monochrome-first palette with a soft white glow accent.
+ * See AGENTS.md for the reference mood (Norch-style AI landing page):
+ * pure black canvas, thin light type, pill buttons, faint hairline borders.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050505;
+  --surface: #0c0c0d;
+  --surface-raised: #121214;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --foreground: #f4f4f3;
+  --muted: #8a8a90;
+  --muted-2: #55565c;
+  --accent: #f4f4f3;
+  --accent-foreground: #050505;
+  --glow: rgba(255, 255, 255, 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--glow), transparent);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Shared component classes — reused across every page so the look stays
+   consistent without re-deriving long utility strings everywhere. */
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,255,255,0.15)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-200 hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-colors duration-200 hover:bg-white/[0.06] hover:text-[var(--foreground)];
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-colors duration-200 placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04];
+  }
+
+  .fade-in {
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }

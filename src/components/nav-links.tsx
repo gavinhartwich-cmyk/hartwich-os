@@ -27,10 +27,10 @@ export default function NavLinks({ showBookingAdmin = false }: { showBookingAdmi
           <Link
             key={link.href}
             href={link.href}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
               active
-                ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                ? "bg-white text-black shadow-[0_0_16px_rgba(255,255,255,0.2)]"
+                : "text-white/50 hover:bg-white/[0.06] hover:text-white/90"
             }`}
           >
             {link.label}

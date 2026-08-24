@@ -33,8 +33,7 @@ function FieldInput({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const baseClass =
-    "w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900";
+  const baseClass = "input-field";
 
   if (question.fieldType === "textarea") {
     return (
@@ -163,7 +162,7 @@ export default function BookClient() {
   if (step === "loading") {
     return (
       <Shell companyName={config?.company?.name}>
-        <p className="text-sm text-neutral-500">Loading availability…</p>
+        <p className="text-sm text-[var(--muted)]">Loading availability…</p>
       </Shell>
     );
   }
@@ -171,7 +170,7 @@ export default function BookClient() {
   if (step === "unavailable") {
     return (
       <Shell companyName={config?.company?.name}>
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-white/70">
           Online booking isn&apos;t available right now — reach out directly and we&apos;ll find a time.
         </p>
       </Shell>
@@ -181,7 +180,7 @@ export default function BookClient() {
   if (step === "error") {
     return (
       <Shell companyName={config?.company?.name}>
-        <p className="text-sm text-red-600">Couldn&apos;t load booking availability. Please refresh and try again.</p>
+        <p className="text-sm text-red-400">Couldn&apos;t load booking availability. Please refresh and try again.</p>
       </Shell>
     );
   }
@@ -200,10 +199,10 @@ export default function BookClient() {
       : "";
     return (
       <Shell companyName={config?.company?.name}>
-        <div className="text-center">
-          <h2 className="text-lg font-semibold text-emerald-700">You&apos;re booked ✓</h2>
-          <p className="mt-2 text-sm text-neutral-600">{confirmedLabel}</p>
-          <p className="mt-4 text-sm text-neutral-500">A confirmation email is on its way.</p>
+        <div className="fade-in text-center">
+          <h2 className="text-lg font-medium text-emerald-400">You&apos;re booked ✓</h2>
+          <p className="mt-2 text-sm text-white/80">{confirmedLabel}</p>
+          <p className="mt-4 text-sm text-[var(--muted)]">A confirmation email is on its way.</p>
         </div>
       </Shell>
     );
@@ -212,10 +211,10 @@ export default function BookClient() {
   if (step === "form") {
     return (
       <Shell companyName={config?.company?.name}>
-        <button onClick={() => setStep("picking")} className="mb-4 text-sm text-neutral-500 hover:text-neutral-900">
+        <button onClick={() => setStep("picking")} className="mb-4 text-sm text-[var(--muted)] transition-colors hover:text-white">
           ← Back to times
         </button>
-        <p className="mb-4 text-sm font-medium text-neutral-700">
+        <p className="mb-4 text-sm font-medium text-white/80">
           {selectedSlot &&
             new Date(selectedSlot).toLocaleString("en-US", {
               weekday: "long",
@@ -230,9 +229,9 @@ export default function BookClient() {
         <form onSubmit={submit} className="space-y-4">
           {config?.questions.map((q) => (
             <div key={q.id}>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">
+              <label className="mb-1 block text-sm font-medium text-[var(--muted)]">
                 {q.label}
-                {q.required && <span className="text-red-500"> *</span>}
+                {q.required && <span className="text-red-400"> *</span>}
               </label>
               <FieldInput
                 question={q}
@@ -241,11 +240,8 @@ export default function BookClient() {
               />
             </div>
           ))}
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700"
-          >
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <button type="submit" className="btn-primary w-full">
             Confirm booking
           </button>
         </form>
@@ -256,7 +252,7 @@ export default function BookClient() {
   if (step === "submitting") {
     return (
       <Shell companyName={config?.company?.name}>
-        <p className="text-sm text-neutral-500">Booking…</p>
+        <p className="text-sm text-[var(--muted)]">Booking…</p>
       </Shell>
     );
   }
@@ -264,11 +260,11 @@ export default function BookClient() {
   // step === "picking"
   return (
     <Shell companyName={config?.company?.name}>
-      <p className="mb-4 text-sm text-neutral-500">
+      <p className="mb-4 text-sm text-[var(--muted)]">
         {config?.meetingDurationMinutes}-minute call · times shown in {config?.timezone}
       </p>
       {days.length === 0 ? (
-        <p className="text-sm text-neutral-500">No open times right now — check back soon.</p>
+        <p className="text-sm text-[var(--muted)]">No open times right now — check back soon.</p>
       ) : (
         <>
           <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
@@ -279,10 +275,10 @@ export default function BookClient() {
                   setSelectedDate(d.date);
                   setSelectedSlot(null);
                 }}
-                className={`shrink-0 rounded-md border px-3 py-2 text-sm font-medium ${
+                className={`shrink-0 rounded-full border px-3 py-2 text-sm font-medium transition-all duration-200 ${
                   selectedDate === d.date
-                    ? "border-neutral-900 bg-neutral-900 text-white"
-                    : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+                    ? "border-white/80 bg-white text-black"
+                    : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
                 }`}
               >
                 {d.label}
@@ -295,10 +291,10 @@ export default function BookClient() {
                 <button
                   key={s.startIso}
                   onClick={() => setSelectedSlot(s.startIso)}
-                  className={`rounded-md border px-3 py-2 text-sm ${
+                  className={`rounded-lg border px-3 py-2 text-sm transition-all duration-200 ${
                     selectedSlot === s.startIso
-                      ? "border-neutral-900 bg-neutral-900 text-white"
-                      : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"
+                      ? "border-white/80 bg-white text-black"
+                      : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
                   }`}
                 >
                   {s.label}
@@ -306,11 +302,7 @@ export default function BookClient() {
               ))}
             </div>
           )}
-          <button
-            onClick={proceedToForm}
-            disabled={!selectedSlot}
-            className="mt-6 w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <button onClick={proceedToForm} disabled={!selectedSlot} className="btn-primary mt-6 w-full">
             Continue
           </button>
         </>
@@ -321,13 +313,13 @@ export default function BookClient() {
 
 function Shell({ children, companyName }: { children: React.ReactNode; companyName?: string | null }) {
   return (
-    <main className="flex min-h-screen items-start justify-center bg-neutral-50 px-4 py-12 sm:items-center">
-      <div className="w-full max-w-md rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
+    <main className="flex min-h-screen items-start justify-center bg-[var(--background)] px-4 py-12 sm:items-center">
+      <div className="surface-card fade-in w-full max-w-md p-6">
         <div className="mb-6 text-center">
-          <h1 className="text-lg font-semibold">
+          <h1 className="text-lg font-light tracking-tight text-white">
             {companyName ? `Book a call for ${companyName}` : "Book a call with Hartwich Labs"}
           </h1>
-          <p className="text-sm text-neutral-500">Pick a time that works for you.</p>
+          <p className="text-sm text-[var(--muted)]">Pick a time that works for you.</p>
         </div>
         {children}
       </div>

@@ -16,7 +16,7 @@ export default async function CalendarPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Calendar</h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--muted)]">
           Follow-ups and meetings, tied to a company/deal where relevant.
         </p>
       </div>

@@ -18,13 +18,13 @@ export default async function ReviewQueuePage({
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Qualified Leads</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-[var(--muted)]">
             {companies.length} lead{companies.length === 1 ? "" : "s"} ready to reach out to
           </p>
         </div>
         <Link
           href="/leads/find"
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="btn-primary"
         >
           + Find Leads
         </Link>
@@ -33,7 +33,7 @@ export default async function ReviewQueuePage({
       {runId && <DiscoveryProgress runId={runId} />}
 
       {companies.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500 dark:border-neutral-700">
+        <p className="surface-card border-dashed p-6 text-sm text-[var(--muted)]">
           No qualified leads yet — find leads to get started.
         </p>
       ) : (
@@ -41,7 +41,7 @@ export default async function ReviewQueuePage({
           {companies.map((company) => (
             <li
               key={company.id}
-              className="rounded-md border border-neutral-200 p-4 dark:border-neutral-800"
+              className="surface-card p-4"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -51,17 +51,17 @@ export default async function ReviewQueuePage({
                     </Link>
                     <StatusBadge status={company.status} />
                     {company.googleRating && (
-                      <span className="rounded bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+                      <span className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
                         {company.googleRating}★ ({company.googleReviewCount || 0} reviews)
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-neutral-400">
+                  <p className="mt-0.5 text-xs text-[var(--muted-2)]">
                     {cityState(company.city, company.state) ?? company.addressLine ?? "—"}
                     {company.contactTier && ` · Tier ${company.contactTier}`}
                   </p>
                   {company.qualificationReasoning && (
-                    <p className="mt-2 max-w-2xl text-sm text-neutral-600 dark:text-neutral-300">
+                    <p className="mt-2 max-w-2xl text-sm text-white/70">
                       {company.qualificationReasoning}
                     </p>
                   )}
@@ -80,7 +80,7 @@ export default async function ReviewQueuePage({
                     <input type="hidden" name="companyId" value={company.id} />
                     <button
                       type="submit"
-                      className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                      className="btn-secondary"
                     >
                       Disqualify
                     </button>
