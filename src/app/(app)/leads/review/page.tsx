@@ -43,7 +43,7 @@ export default async function ReviewQueuePage({
               key={company.id}
               className="surface-card p-4"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/companies/${company.id}`} className="font-medium hover:underline">
@@ -67,20 +67,20 @@ export default async function ReviewQueuePage({
                   )}
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <form action={promoteToBoardAction}>
+                  <form action={promoteToBoardAction} className="flex-1 sm:flex-none">
                     <input type="hidden" name="companyId" value={company.id} />
                     <button
                       type="submit"
-                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+                      className="w-full rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 sm:w-auto"
                     >
                       Move to board
                     </button>
                   </form>
-                  <form action={disqualifyLeadAction}>
+                  <form action={disqualifyLeadAction} className="flex-1 sm:flex-none">
                     <input type="hidden" name="companyId" value={company.id} />
                     <button
                       type="submit"
-                      className="btn-secondary"
+                      className="btn-secondary w-full sm:w-auto"
                     >
                       Disqualify
                     </button>
