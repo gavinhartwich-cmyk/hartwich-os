@@ -120,6 +120,13 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "cancelled",
 ]);
 
+export const discoveryRunStatusEnum = pgEnum("discovery_run_status", [
+  "running",
+  "completed", // hit the target count
+  "completed_partial", // exhausted the radius cap short of target — never lowers the quality bar to compensate
+  "failed",
+]);
+
 // ---------------------------------------------------------------------------
 // users — the allow-listed admin accounts (see §4 of the architecture doc)
 // ---------------------------------------------------------------------------
@@ -368,6 +375,25 @@ export const leadSourcesConfig = pgTable("lead_sources_config", {
   config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// discovery_runs — one row per "Find Leads" search, so the UI can show live
+// progress while the background job widens its search radius to hit the
+// user's requested qualified-lead count without loosening the quality bar.
+// ---------------------------------------------------------------------------
+
+export const discoveryRuns = pgTable("discovery_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  area: text("area").notNull(),
+  keyword: text("keyword").notNull(),
+  targetCount: integer("target_count").notNull(),
+  foundCount: integer("found_count").notNull().default(0),
+  radiusMiles: integer("radius_miles"), // current/final search radius from the area's center
+  status: discoveryRunStatusEnum("status").notNull().default("running"),
+  requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
 

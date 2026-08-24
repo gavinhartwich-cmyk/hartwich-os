@@ -8,6 +8,7 @@ import { discoverLeads } from "@/lib/actions/discover-leads";
 const FindLeadsFormSchema = z.object({
   area: z.string().trim().min(1),
   keyword: z.string().trim().optional(),
+  targetCount: z.coerce.number().int().min(1).max(200).optional(),
 });
 
 export async function triggerLeadDiscoveryAction(formData: FormData) {
@@ -22,11 +23,12 @@ export async function triggerLeadDiscoveryAction(formData: FormData) {
   }
 
   // Start lead discovery (returns immediately, processes in background)
-  await discoverLeads({
+  const { runId } = await discoverLeads({
     area: parsed.data.area,
     keyword: parsed.data.keyword || undefined,
+    targetCount: parsed.data.targetCount,
     requestedByUserId: user.id,
   });
 
-  redirect("/leads/review?started=1");
+  redirect(`/leads/review?runId=${runId}`);
 }

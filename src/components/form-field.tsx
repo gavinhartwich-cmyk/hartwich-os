@@ -6,6 +6,9 @@ export default function FormField({
   autoFocus,
   placeholder,
   defaultValue,
+  min,
+  max,
+  hint,
 }: {
   label: string;
   name: string;
@@ -14,6 +17,9 @@ export default function FormField({
   autoFocus?: boolean;
   placeholder?: string;
   defaultValue?: string | null;
+  min?: number;
+  max?: number;
+  hint?: string;
 }) {
   return (
     <div>
@@ -29,8 +35,11 @@ export default function FormField({
         autoFocus={autoFocus}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
+        min={min}
+        max={max}
         className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
       />
+      {hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
     </div>
   );
 }

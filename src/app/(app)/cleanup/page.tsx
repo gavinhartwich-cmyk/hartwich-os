@@ -35,7 +35,7 @@ export default function CleanupPage() {
   }
 
   async function runCleanup() {
-    if (!confirm("Delete all disqualified and needs_review leads?")) {
+    if (!confirm("Delete all disqualified leads? Leads needing review will be kept.")) {
       return;
     }
 
@@ -99,7 +99,7 @@ export default function CleanupPage() {
                 <p className="mt-1 text-3xl font-bold text-yellow-900 dark:text-yellow-100">
                   {stats?.needsReview || 0}
                 </p>
-                <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">Will be deleted</p>
+                <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">Kept — awaiting your review</p>
               </div>
 
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
@@ -120,10 +120,11 @@ export default function CleanupPage() {
                 <div>
                   <h2 className="font-semibold">Clean Reset</h2>
                   <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    This will permanently delete <strong>{(stats?.disqualified || 0) + (stats?.needsReview || 0)}</strong> leads.
+                    This will permanently delete <strong>{stats?.disqualified || 0}</strong> disqualified leads.
                   </p>
                   <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-                    <strong>{stats?.qualified || 0}</strong> qualified leads on your board will be kept.
+                    <strong>{stats?.qualified || 0}</strong> qualified leads and{" "}
+                    <strong>{stats?.needsReview || 0}</strong> awaiting review will be kept.
                   </p>
                 </div>
               </div>
@@ -133,7 +134,7 @@ export default function CleanupPage() {
             <div className="flex gap-3">
               <button
                 onClick={runCleanup}
-                disabled={cleaning || !stats || stats.disqualified + stats.needsReview === 0}
+                disabled={cleaning || !stats || stats.disqualified === 0}
                 className="rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {cleaning ? (

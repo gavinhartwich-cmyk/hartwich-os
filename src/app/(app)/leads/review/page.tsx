@@ -3,8 +3,14 @@ import { listCompaniesByStatus } from "@/lib/data/companies";
 import StatusBadge from "@/components/status-badge";
 import { cityState } from "@/lib/utils/format";
 import { promoteToBoardAction, disqualifyLeadAction } from "./actions";
+import DiscoveryProgress from "./discovery-progress";
 
-export default async function ReviewQueuePage() {
+export default async function ReviewQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ runId?: string }>;
+}) {
+  const { runId } = await searchParams;
   const companies = await listCompaniesByStatus("qualified");
 
   return (
@@ -23,6 +29,8 @@ export default async function ReviewQueuePage() {
           + Find Leads
         </Link>
       </div>
+
+      {runId && <DiscoveryProgress runId={runId} />}
 
       {companies.length === 0 ? (
         <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500 dark:border-neutral-700">

@@ -31,6 +31,15 @@ export default async function FindLeadsPage({
       <form action={triggerLeadDiscoveryAction} className="space-y-4">
         <FormField label="Area" name="area" required autoFocus placeholder="Austin, TX" />
         <FormField label="Keyword" name="keyword" placeholder="HVAC contractor (default)" />
+        <FormField
+          label="How many qualified leads do you want?"
+          name="targetCount"
+          type="number"
+          defaultValue="20"
+          min={1}
+          max={200}
+          hint="If the area doesn't have enough, the search radius expands automatically — the quality bar never drops to make up the difference."
+        />
 
         <button
           type="submit"

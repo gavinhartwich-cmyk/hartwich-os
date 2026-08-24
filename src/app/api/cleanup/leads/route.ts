@@ -3,17 +3,18 @@ import { companies, deals } from "@/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 
 /**
- * Clean up leads: delete all disqualified and needs_review companies.
- * Keep only "qualified" leads (those on the board).
+ * Clean up leads: delete disqualified companies only. "needs_review" is
+ * left alone on purpose — those are manually-added leads (or legacy
+ * AI-sourced ones) still waiting on a human look, not junk.
  * Use DELETE method to trigger: fetch("/api/cleanup/leads", { method: "DELETE" })
  */
 export async function DELETE() {
   try {
-    // Get all companies that are disqualified or needs_review
+    // Get all disqualified companies
     const toDelete = await db
       .select({ id: companies.id })
       .from(companies)
-      .where(inArray(companies.status, ["disqualified", "needs_review"]));
+      .where(eq(companies.status, "disqualified"));
 
     const idsToDelete = toDelete.map((c) => c.id);
 
@@ -36,12 +37,8 @@ export async function DELETE() {
 
     return Response.json({
       success: true,
-      message: `Cleaned up ${deleted.length} companies`,
+      message: `Cleaned up ${deleted.length} disqualified companies`,
       deletedCount: deleted.length,
-      details: {
-        disqualified: deleted.filter((c) => c.status === "disqualified").length,
-        needsReview: deleted.filter((c) => c.status === "needs_review").length,
-      },
     });
   } catch (error) {
     return Response.json(
@@ -79,7 +76,7 @@ export async function GET() {
         needsReview,
         total: qualified + disqualified + needsReview,
       },
-      message: `Database has ${qualified} qualified leads. Cleanup will remove ${disqualified + needsReview} other leads.`,
+      message: `Database has ${qualified} qualified leads. Cleanup will remove ${disqualified} disqualified leads (${needsReview} needing review are kept).`,
     });
   } catch (error) {
     return Response.json(
