@@ -7,6 +7,7 @@
  * pure black canvas, thin light type, pill buttons, faint hairline borders.
  */
 :root {
+  color-scheme: dark;
   --background: #050505;
   --surface: #0c0c0d;
   --surface-raised: #121214;
