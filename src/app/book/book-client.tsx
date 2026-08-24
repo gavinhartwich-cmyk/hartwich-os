@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import AmbientOrb from "@/components/ambient-orb";
+import Reveal from "@/components/reveal";
 
 type Question = {
   id: string;
@@ -268,37 +270,39 @@ export default function BookClient() {
       ) : (
         <>
           <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
-            {days.map((d) => (
-              <button
-                key={d.date}
-                onClick={() => {
-                  setSelectedDate(d.date);
-                  setSelectedSlot(null);
-                }}
-                className={`shrink-0 rounded-full border px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                  selectedDate === d.date
-                    ? "border-white/80 bg-white text-black"
-                    : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
-                }`}
-              >
-                {d.label}
-              </button>
+            {days.map((d, i) => (
+              <Reveal key={d.date} delay={i * 40} className="shrink-0">
+                <button
+                  onClick={() => {
+                    setSelectedDate(d.date);
+                    setSelectedSlot(null);
+                  }}
+                  className={`shrink-0 rounded-full border px-3 py-2 text-sm font-medium transition-all duration-200 hover:scale-[1.04] active:scale-[0.96] ${
+                    selectedDate === d.date
+                      ? "border-white/80 bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.18)]"
+                      : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              </Reveal>
             ))}
           </div>
           {selectedDay && (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {selectedDay.slots.map((s) => (
-                <button
-                  key={s.startIso}
-                  onClick={() => setSelectedSlot(s.startIso)}
-                  className={`rounded-lg border px-3 py-2 text-sm transition-all duration-200 ${
-                    selectedSlot === s.startIso
-                      ? "border-white/80 bg-white text-black"
-                      : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  {s.label}
-                </button>
+              {selectedDay.slots.map((s, i) => (
+                <Reveal key={s.startIso} delay={i * 30}>
+                  <button
+                    onClick={() => setSelectedSlot(s.startIso)}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-all duration-200 hover:scale-[1.03] active:scale-[0.96] ${
+                      selectedSlot === s.startIso
+                        ? "border-white/80 bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.18)]"
+                        : "border-white/15 text-white/70 hover:border-white/30 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                </Reveal>
               ))}
             </div>
           )}
@@ -313,9 +317,20 @@ export default function BookClient() {
 
 function Shell({ children, companyName }: { children: React.ReactNode; companyName?: string | null }) {
   return (
-    <main className="flex min-h-screen items-start justify-center bg-[var(--background)] px-4 py-12 sm:items-center">
-      <div className="surface-card fade-in w-full max-w-md p-6">
+    <main className="relative flex min-h-screen items-start justify-center overflow-hidden bg-[var(--background)] px-4 py-12 sm:items-center">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,255,255,0.08), transparent)",
+        }}
+      />
+      <AmbientOrb className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-50" />
+
+      <div className="surface-card fade-in relative w-full max-w-md p-6">
         <div className="mb-6 text-center">
+          <span className="mb-3 inline-block rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium tracking-[0.15em] text-white/40 uppercase">
+            Hartwich Labs
+          </span>
           <h1 className="text-lg font-light tracking-tight text-white">
             {companyName ? `Book a call for ${companyName}` : "Book a call with Hartwich Labs"}
           </h1>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listCompanies } from "@/lib/data/companies";
 import { cityState } from "@/lib/utils/format";
 import StatusBadge from "@/components/status-badge";
+import Reveal from "@/components/reveal";
 
 export default async function CompaniesPage({
   searchParams,
@@ -41,27 +42,30 @@ export default async function CompaniesPage({
         <>
           {/* Card list on small screens — a table would force horizontal scroll on a phone. */}
           <ul className="space-y-2 md:hidden">
-            {companies.map((company) => (
+            {companies.map((company, i) => (
               <li key={company.id}>
-                <Link
-                  href={`/companies/${company.id}`}
-                  className="surface-card block p-3 transition-colors duration-150 hover:bg-white/[0.03]"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-white/90">{company.name}</span>
-                    <StatusBadge status={company.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {cityState(company.city, company.state) ?? "—"}
-                    {" · "}
-                    <span className="capitalize">{company.source.replace("_", " ")}</span>
-                  </p>
-                </Link>
+                <Reveal delay={Math.min(i * 40, 400)}>
+                  <Link
+                    href={`/companies/${company.id}`}
+                    className="surface-card surface-card-hover block p-3 transition-colors duration-150 hover:bg-white/[0.03]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-white/90">{company.name}</span>
+                      <StatusBadge status={company.status} />
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {cityState(company.city, company.state) ?? "—"}
+                      {" · "}
+                      <span className="capitalize">{company.source.replace("_", " ")}</span>
+                    </p>
+                  </Link>
+                </Reveal>
               </li>
             ))}
           </ul>
 
-          <div className="surface-card hidden overflow-hidden md:block">
+          <Reveal className="hidden md:block">
+          <div className="surface-card overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-white/[0.02] text-left text-xs uppercase tracking-wide text-white/40">
                 <tr>
@@ -96,6 +100,7 @@ export default async function CompaniesPage({
               </tbody>
             </table>
           </div>
+          </Reveal>
         </>
       )}
     </div>

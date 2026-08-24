@@ -29,7 +29,7 @@ export default function NavLinks({
   const links = showBookingAdmin ? [...LINKS, BOOKING_ADMIN_LINK] : LINKS;
 
   return (
-    <nav className={stacked ? "flex flex-col gap-1" : "flex items-center gap-1"}>
+    <nav className={stacked ? "flex flex-col gap-1" : "pill-nav"}>
       {links.map((link) => {
         const active = pathname.startsWith(link.href);
         return (
@@ -44,7 +44,7 @@ export default function NavLinks({
                       ? "bg-white text-black"
                       : "text-white/60 hover:bg-white/[0.06] hover:text-white/90"
                   }`
-                : `rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
+                : `rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] ${
                     active
                       ? "bg-white text-black shadow-[0_0_16px_rgba(255,255,255,0.2)]"
                       : "text-white/50 hover:bg-white/[0.06] hover:text-white/90"

@@ -37,6 +37,10 @@
   border-color: var(--border);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--background);
   background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--glow), transparent);
@@ -69,27 +73,48 @@ body {
    consistent without re-deriving long utility strings everywhere. */
 @layer components {
   .surface-card {
-    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)];
+    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-300;
+  }
+
+  .surface-card-hover {
+    @apply hover:-translate-y-0.5 hover:border-white/[0.16] hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)];
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,255,255,0.15)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+    @apply relative isolate inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(255,255,255,0.22)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none;
+  }
+
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-primary:hover::after {
+    transform: translateX(120%);
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-200 hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-300 ease-out hover:scale-[1.015] hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-colors duration-200 hover:bg-white/[0.06] hover:text-[var(--foreground)];
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-[var(--foreground)] active:scale-[0.96];
   }
 
   .input-field {
-    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-colors duration-200 placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04];
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-all duration-200 ease-out placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.05)];
   }
 
   .fade-in {
-    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .pill-nav {
+    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-sm;
   }
 }
 

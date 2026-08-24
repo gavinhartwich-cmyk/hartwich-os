@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import FormField from "@/components/form-field";
+import AmbientOrb from "@/components/ambient-orb";
 
 function LoginError() {
   const searchParams = useSearchParams();
@@ -77,8 +78,13 @@ export default function LoginPage() {
             "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,255,255,0.08), transparent)",
         }}
       />
+      <AmbientOrb className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-70" />
+
       <div className="fade-in surface-card relative w-full max-w-sm space-y-6 p-8 text-center">
         <div>
+          <span className="mb-3 inline-block rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium tracking-[0.15em] text-white/40 uppercase">
+            Internal Access
+          </span>
           <h1 className="text-2xl font-light tracking-tight text-white">
             Hartwich <span className="text-white/40">OS</span>
           </h1>
