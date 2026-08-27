@@ -2,6 +2,12 @@ import Link from "next/link";
 import FormField from "@/components/form-field";
 import { triggerLeadDiscoveryAction } from "./actions";
 
+// Discovery keeps working after the redirect fires (via `after()` in the
+// action) — this raises the platform's execution ceiling for that tail work
+// as far as the Hobby/Free tier allows. Large target counts can still get
+// cut short at the ceiling; whatever was found by then is already saved.
+export const maxDuration = 60;
+
 export default async function FindLeadsPage({
   searchParams,
 }: {

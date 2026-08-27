@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import {
   searchHvacCompanies,
   searchHvacCompaniesInRadius,
@@ -49,8 +50,11 @@ export async function discoverLeads(params: DiscoverLeadsParams) {
 
   const run = await createDiscoveryRun({ area, keyword, targetCount: target, requestedByUserId });
 
-  // Start background job but don't wait for it
-  setImmediate(async () => {
+  // Start background job but don't wait for it. `after()` (not setImmediate)
+  // because serverless platforms like Vercel can freeze the process the
+  // instant the response is sent — setImmediate's callback would never run
+  // there. `after()` uses the platform's own hook to keep it alive.
+  after(async () => {
     const seenPlaceIds = new Set<string>();
     let created = 0;
     let skipped = 0;
