@@ -60,7 +60,13 @@ export default function Board({
           <Column key={stage.id} stage={stage} deals={deals.filter((d) => d.stageId === stage.id)} />
         ))}
       </div>
-      <DragOverlay>{activeDeal ? <DealCard deal={activeDeal} /> : null}</DragOverlay>
+      <DragOverlay>
+        {activeDeal ? (
+          <div className="rotate-2 scale-105 opacity-95 drop-shadow-2xl">
+            <DealCard deal={activeDeal} />
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

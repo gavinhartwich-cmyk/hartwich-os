@@ -1,12 +1,19 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import type { BoardDeal } from "@/lib/data/deals";
 import { cityState, daysSince, formatCurrency, initials } from "@/lib/utils/format";
 
-export default function DealCard({ deal }: { deal: BoardDeal }) {
+export default function DealCard({
+  deal,
+  staggerIndex,
+}: {
+  deal: BoardDeal;
+  staggerIndex?: number;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: deal.id,
   });
@@ -20,10 +27,15 @@ export default function DealCard({ deal }: { deal: BoardDeal }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      style={{ transform: CSS.Translate.toString(transform) }}
-      className={`touch-none rounded-md border border-neutral-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900 ${
-        isDragging ? "opacity-40" : ""
-      }`}
+      style={
+        {
+          transform: CSS.Translate.toString(transform),
+          ...(staggerIndex !== undefined ? { "--stagger-index": staggerIndex } : {}),
+        } as CSSProperties
+      }
+      className={`touch-none rounded-lg border border-neutral-200 bg-white p-3 shadow-sm transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-neutral-800 dark:bg-neutral-900 ${
+        staggerIndex !== undefined ? "stagger-item" : ""
+      } ${isDragging ? "opacity-40" : ""}`}
     >
       <Link
         href={`/companies/${deal.company.id}`}

@@ -29,7 +29,7 @@ export default function FormField({
         autoFocus={autoFocus}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
-        className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-900"
       />
     </div>
   );

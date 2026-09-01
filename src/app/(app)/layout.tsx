@@ -16,11 +16,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      <header className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-10 border-b border-neutral-200/80 bg-white/70 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/70">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-6">
-            <span className="text-sm font-semibold tracking-tight">Hartwich OS</span>
+            <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
+              Hartwich OS
+            </span>
             <NavLinks />
           </div>
           <div className="flex items-center gap-3">
@@ -29,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-6 py-8 animate-fade-in-up">{children}</main>
     </div>
   );
 }

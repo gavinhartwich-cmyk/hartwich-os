@@ -20,10 +20,10 @@ export default function NavLinks() {
           <Link
             key={link.href}
             href={link.href}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1.5 text-sm font-medium ${
               active
-                ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                ? "bg-neutral-900 text-white shadow-sm dark:bg-white dark:text-neutral-900"
+                : "text-neutral-600 hover:bg-neutral-900/5 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
             }`}
           >
             {link.label}

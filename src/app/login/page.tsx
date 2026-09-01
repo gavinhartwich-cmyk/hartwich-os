@@ -63,7 +63,8 @@ function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+        data-animate-press
+        className="w-full rounded-md bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/40 disabled:opacity-50"
       >
         {submitting ? "Signing in…" : "Sign in"}
       </button>
@@ -74,9 +75,11 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
-      <div className="w-full max-w-sm space-y-6 text-center">
+      <div className="animate-scale-in w-full max-w-sm space-y-6 rounded-2xl border border-neutral-200/80 bg-white/70 p-8 text-center shadow-xl shadow-neutral-900/5 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-900/60 dark:shadow-black/20">
         <div>
-          <h1 className="text-2xl font-semibold">Hartwich OS</h1>
+          <h1 className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-2xl font-semibold text-transparent">
+            Hartwich OS
+          </h1>
           <p className="mt-1 text-sm text-neutral-500">Internal sales operating system</p>
         </div>
 
