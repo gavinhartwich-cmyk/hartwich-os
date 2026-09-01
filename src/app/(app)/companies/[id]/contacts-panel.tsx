@@ -11,28 +11,28 @@ export default function ContactsPanel({
 }) {
   return (
     <section>
-      <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">Contacts</h2>
+      <h2 className="text-sm font-semibold text-white/80">Contacts</h2>
 
       <ul className="mt-3 space-y-2">
         {contacts.length === 0 && (
-          <li className="text-sm text-neutral-400">No contacts yet.</li>
+          <li className="text-sm text-[var(--muted-2)]">No contacts yet.</li>
         )}
         {contacts.map((contact) => (
           <li
             key={contact.id}
-            className="rounded-md border border-neutral-200 p-2.5 text-sm dark:border-neutral-800"
+            className="surface-card p-2.5 text-sm"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium">{contact.name || "Unnamed contact"}</span>
               {contact.isPrimary && (
-                <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-medium text-white/70">
                   Primary
                 </span>
               )}
             </div>
-            {contact.title && <p className="text-xs text-neutral-500">{contact.title}</p>}
+            {contact.title && <p className="text-xs text-[var(--muted-2)]">{contact.title}</p>}
             {(contact.email || contact.phone) && (
-              <p className="mt-1 space-x-2 text-xs text-neutral-400">
+              <p className="mt-1 space-x-2 text-xs text-[var(--muted-2)]">
                 {contact.email && <span>{contact.email}</span>}
                 {contact.phone && <span>{contact.phone}</span>}
               </p>
@@ -42,7 +42,7 @@ export default function ContactsPanel({
                 <form action={setPrimaryContactAction}>
                   <input type="hidden" name="companyId" value={companyId} />
                   <input type="hidden" name="contactId" value={contact.id} />
-                  <button type="submit" className="text-xs text-neutral-500 hover:underline">
+                  <button type="submit" className="text-xs text-[var(--muted)] transition-colors hover:text-white">
                     Make primary
                   </button>
                 </form>
@@ -60,7 +60,7 @@ export default function ContactsPanel({
       </ul>
 
       <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-medium text-neutral-500 hover:underline">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--muted)] transition-colors hover:text-white">
           + Add contact
         </summary>
         <form action={createContactAction} className="mt-3 space-y-3">
@@ -74,13 +74,13 @@ export default function ContactsPanel({
             <input
               type="checkbox"
               name="isPrimary"
-              className="rounded border-neutral-300 dark:border-neutral-700"
+              className="rounded border-white/20 bg-white/[0.02]"
             />
             Primary contact
           </label>
           <button
             type="submit"
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="btn-primary"
           >
             Add contact
           </button>

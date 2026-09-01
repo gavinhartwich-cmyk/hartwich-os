@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import FormField from "@/components/form-field";
+import AmbientOrb from "@/components/ambient-orb";
 
 function LoginError() {
   const searchParams = useSearchParams();
@@ -11,14 +12,14 @@ function LoginError() {
 
   if (error === "not_allowed") {
     return (
-      <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
         That account isn&apos;t authorized for Hartwich OS.
       </p>
     );
   }
   if (error === "auth_failed") {
     return (
-      <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
         Sign-in failed. Please try again.
       </p>
     );
@@ -58,14 +59,9 @@ function LoginForm() {
       <FormField label="Email" name="email" type="email" required autoFocus />
       <FormField label="Password" name="password" type="password" required />
 
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        data-animate-press
-        className="w-full rounded-md bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/40 disabled:opacity-50"
-      >
+      <button type="submit" disabled={submitting} className="btn-primary w-full">
         {submitting ? "Signing in…" : "Sign in"}
       </button>
     </form>
@@ -74,13 +70,25 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
-      <div className="animate-scale-in w-full max-w-sm space-y-6 rounded-2xl border border-neutral-200/80 bg-white/70 p-8 text-center shadow-xl shadow-neutral-900/5 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-900/60 dark:shadow-black/20">
+    <main className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden bg-[var(--background)] px-4">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,255,255,0.08), transparent)",
+        }}
+      />
+      <AmbientOrb className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-70" />
+
+      <div className="fade-in surface-card relative w-full max-w-sm space-y-6 p-8 text-center">
         <div>
-          <h1 className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-2xl font-semibold text-transparent">
-            Hartwich OS
+          <span className="mb-3 inline-block rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium tracking-[0.15em] text-white/40 uppercase">
+            Internal Access
+          </span>
+          <h1 className="text-2xl font-light tracking-tight text-white">
+            Hartwich <span className="text-white/40">OS</span>
           </h1>
-          <p className="mt-1 text-sm text-neutral-500">Internal sales operating system</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">Internal sales operating system</p>
         </div>
 
         <Suspense fallback={null}>
@@ -89,9 +97,7 @@ export default function LoginPage() {
 
         <LoginForm />
 
-        <p className="text-xs text-neutral-400">
-          Access is limited to Hartwich Labs admins.
-        </p>
+        <p className="text-xs text-white/25">Access is limited to Hartwich Labs admins.</p>
       </div>
     </main>
   );

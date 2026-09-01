@@ -1,32 +1,40 @@
 @import "tailwindcss";
 
+/*
+ * Hartwich OS — dark futuristic theme.
+ * Always-dark, monochrome-first palette with a soft white glow accent.
+ * See AGENTS.md for the reference mood (Norch-style AI landing page):
+ * pure black canvas, thin light type, pill buttons, faint hairline borders.
+ */
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
-  --surface: #ffffff;
-  --border-subtle: rgb(0 0 0 / 0.08);
-  --accent: #6366f1;
-  --accent-foreground: #ffffff;
+  color-scheme: dark;
+  --background: #050505;
+  --surface: #0c0c0d;
+  --surface-raised: #121214;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --foreground: #f4f4f3;
+  --muted: #8a8a90;
+  --muted-2: #55565c;
+  --accent: #f4f4f3;
+  --accent-foreground: #050505;
+  --glow: rgba(255, 255, 255, 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0c0d10;
-    --foreground: #e8e8ea;
-    --surface: #16171b;
-    --border-subtle: rgb(255 255 255 / 0.08);
-    --accent: #818cf8;
-    --accent-foreground: #0c0d10;
-  }
+* {
+  border-color: var(--border);
 }
 
 html {
@@ -35,72 +43,85 @@ html {
 
 body {
   background: var(--background);
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgb(99 102 241 / 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgb(99 102 241 / 0.06), transparent);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, var(--glow), transparent);
   background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Slim, unobtrusive scrollbars — the board scrolls a lot */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(0 0 0 / 0.15) transparent;
+::selection {
+  background: rgba(255, 255, 255, 0.18);
 }
-@media (prefers-color-scheme: dark) {
-  * {
-    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
-  }
-}
+
 ::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(0 0 0 / 0.15);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
 }
-@media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 0.15);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Shared component classes — reused across every page so the look stays
+   consistent without re-deriving long utility strings everywhere. */
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-300;
   }
-}
 
-/* Consistent, smooth base transition for interactive elements instead of
-   every component opting in one at a time. */
-a,
-button,
-input,
-[data-animate-press] {
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease,
-    color 180ms ease,
-    box-shadow 180ms ease,
-    transform 120ms ease,
-    opacity 180ms ease;
-}
-
-button:active,
-[data-animate-press]:active {
-  transform: scale(0.97);
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
+  .surface-card-hover {
+    @apply hover:-translate-y-0.5 hover:border-white/[0.16] hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)];
   }
-  to {
-    opacity: 1;
+
+  .btn-primary {
+    @apply relative isolate inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(255,255,255,0.22)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none;
+  }
+
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-primary:hover::after {
+    transform: translateX(120%);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-300 ease-out hover:scale-[1.015] hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-[var(--foreground)] active:scale-[0.96];
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-all duration-200 ease-out placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.05)];
+  }
+
+  .fade-in {
+    animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .pill-nav {
+    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-sm;
   }
 }
 
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -108,31 +129,12 @@ button:active,
   }
 }
 
-@keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
   }
-  to {
+  50% {
     opacity: 1;
-    transform: scale(1);
   }
-}
-
-.animate-fade-in {
-  animation: fade-in 400ms ease both;
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.animate-scale-in {
-  animation: scale-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Apply to items in a list to stagger their entrance — see deal-card.tsx */
-.stagger-item {
-  animation: fade-in-up 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--stagger-index, 0) * 40ms);
 }

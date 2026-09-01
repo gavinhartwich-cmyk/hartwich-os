@@ -3,76 +3,84 @@ import { listCompaniesByStatus } from "@/lib/data/companies";
 import StatusBadge from "@/components/status-badge";
 import { cityState } from "@/lib/utils/format";
 import { promoteToBoardAction, disqualifyLeadAction } from "./actions";
+import DiscoveryProgress from "./discovery-progress";
 
-export default async function ReviewQueuePage() {
-  const companies = await listCompaniesByStatus("needs_review");
+export default async function ReviewQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ runId?: string }>;
+}) {
+  const { runId } = await searchParams;
+  const companies = await listCompaniesByStatus("qualified");
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Review Queue</h1>
-          <p className="text-sm text-neutral-500">
-            {companies.length} lead{companies.length === 1 ? "" : "s"} awaiting review
+          <h1 className="text-xl font-semibold">Qualified Leads</h1>
+          <p className="text-sm text-[var(--muted)]">
+            {companies.length} lead{companies.length === 1 ? "" : "s"} ready to reach out to
           </p>
         </div>
         <Link
           href="/leads/find"
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="btn-primary"
         >
           + Find Leads
         </Link>
       </div>
 
+      {runId && <DiscoveryProgress runId={runId} />}
+
       {companies.length === 0 ? (
-        <p className="rounded-md border border-dashed border-neutral-300 p-6 text-sm text-neutral-500 dark:border-neutral-700">
-          Nothing waiting on review — leads that score below the auto-file threshold will show up here.
+        <p className="surface-card border-dashed p-6 text-sm text-[var(--muted)]">
+          No qualified leads yet — find leads to get started.
         </p>
       ) : (
         <ul className="space-y-3">
           {companies.map((company) => (
             <li
               key={company.id}
-              className="rounded-md border border-neutral-200 p-4 dark:border-neutral-800"
+              className="surface-card p-4"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/companies/${company.id}`} className="font-medium hover:underline">
                       {company.name}
                     </Link>
                     <StatusBadge status={company.status} />
-                    {company.qualificationScore !== null && (
-                      <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        Score: {company.qualificationScore}
+                    {company.googleRating && (
+                      <span className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                        {company.googleRating}★ ({company.googleReviewCount || 0} reviews)
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-neutral-400">
+                  <p className="mt-0.5 text-xs text-[var(--muted-2)]">
                     {cityState(company.city, company.state) ?? company.addressLine ?? "—"}
                     {company.contactTier && ` · Tier ${company.contactTier}`}
                   </p>
                   {company.qualificationReasoning && (
-                    <p className="mt-2 max-w-2xl text-sm text-neutral-600 dark:text-neutral-300">
+                    <p className="mt-2 max-w-2xl text-sm text-white/70">
                       {company.qualificationReasoning}
                     </p>
                   )}
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <form action={promoteToBoardAction}>
+                  <form action={promoteToBoardAction} className="flex-1 sm:flex-none">
                     <input type="hidden" name="companyId" value={company.id} />
                     <button
                       type="submit"
-                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+                      className="w-full rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 sm:w-auto"
                     >
                       Move to board
                     </button>
                   </form>
-                  <form action={disqualifyLeadAction}>
+                  <form action={disqualifyLeadAction} className="flex-1 sm:flex-none">
                     <input type="hidden" name="companyId" value={company.id} />
                     <button
                       type="submit"
-                      className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                      className="btn-secondary w-full sm:w-auto"
                     >
                       Disqualify
                     </button>

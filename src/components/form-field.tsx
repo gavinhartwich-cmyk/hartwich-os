@@ -6,6 +6,9 @@ export default function FormField({
   autoFocus,
   placeholder,
   defaultValue,
+  min,
+  max,
+  hint,
 }: {
   label: string;
   name: string;
@@ -14,12 +17,15 @@ export default function FormField({
   autoFocus?: boolean;
   placeholder?: string;
   defaultValue?: string | null;
+  min?: number;
+  max?: number;
+  hint?: string;
 }) {
   return (
     <div>
-      <label htmlFor={name} className="mb-1 block text-sm font-medium">
+      <label htmlFor={name} className="mb-1 block text-sm font-medium text-white/80">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-red-400"> *</span>}
       </label>
       <input
         id={name}
@@ -29,8 +35,11 @@ export default function FormField({
         autoFocus={autoFocus}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
-        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-900"
+        min={min}
+        max={max}
+        className="input-field"
       />
+      {hint && <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>}
     </div>
   );
 }

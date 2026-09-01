@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Hartwich OS",
-  description: "Internal sales operating system for Hartwich Labs",
+  description: "Internal sales operating system for Hartwich Labs.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

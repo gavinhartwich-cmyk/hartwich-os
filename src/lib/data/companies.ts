@@ -1,7 +1,8 @@
 import "server-only";
-import { asc, desc, eq, ilike } from "drizzle-orm";
+import { asc, desc, eq, ilike, ne, and } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, deals, pipelineStages } from "@/db/schema";
+import { companies, deals, pipelineStages, contacts } from "@/db/schema";
+import type { CompanyEnrichment } from "@/lib/ai/enrich-company";
 
 export type CompanyInput = {
   name: string;
@@ -19,10 +20,19 @@ export async function listCompanies(search?: string) {
     return db
       .select()
       .from(companies)
-      .where(ilike(companies.name, `%${search.trim()}%`))
+      .where(
+        and(
+          ilike(companies.name, `%${search.trim()}%`),
+          ne(companies.status, "disqualified")
+        )
+      )
       .orderBy(desc(companies.createdAt));
   }
-  return db.select().from(companies).orderBy(desc(companies.createdAt));
+  return db
+    .select()
+    .from(companies)
+    .where(ne(companies.status, "disqualified"))
+    .orderBy(desc(companies.createdAt));
 }
 
 export async function getCompanyById(id: string) {
@@ -165,6 +175,7 @@ export type DiscoveredCompanyInput = {
     isFranchise: boolean;
     disqualifyReason: string | null;
   };
+  enrichment?: CompanyEnrichment | null;
 };
 
 /**
@@ -200,9 +211,34 @@ export async function createDiscoveredCompany(input: DiscoveredCompanyInput) {
         qualificationScore: input.qualification.score,
         qualificationReasoning: input.qualification.reasoning,
         disqualifyReason: input.qualification.disqualifyReason,
+        websiteSummary: input.enrichment?.summary || null,
+        servicesOffered: input.enrichment?.servicesOffered || null,
+        apparentSize: input.enrichment?.apparentSize || null,
         status,
       })
       .returning();
+
+    // Create a contact from whatever enrichment found. Prefer the named
+    // decision-maker's own email; when the LLM found a person but no email
+    // for them (common — most small-business sites don't put an owner's
+    // email next to their name) or found no named contact at all, fall back
+    // to the mailbox scraped straight off the page (see extractFallbackEmail
+    // in enrich-company.ts) so there's still something to send outreach to
+    // instead of leaving the user to go find an email by hand.
+    const en = input.enrichment;
+    const email = en?.contactEmail || en?.fallbackEmail || null;
+    if (en?.contactName || email || en?.contactPhone || en?.contactLinkedinUrl) {
+      await tx.insert(contacts).values({
+        companyId: company.id,
+        name: en?.contactName || null,
+        title: en?.contactTitle || (!en?.contactName && email ? "General inquiries" : null),
+        email,
+        phone: en?.contactPhone || null,
+        linkedinUrl: en?.contactLinkedinUrl || null,
+        isPrimary: true,
+        source: "google_places",
+      });
+    }
 
     if (status === "qualified") {
       const [firstStage] = await tx

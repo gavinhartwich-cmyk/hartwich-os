@@ -8,6 +8,9 @@ accounts and API keys needed to run this locally or deploy it. The full
 system design (stack, database, AI pipeline, phased build plan) lives in
 the *Hartwich OS — System Architecture* doc.
 
+**Moving hosting off Zo Computer?** See [`MIGRATION.md`](./MIGRATION.md) —
+current state, what's already portable, and the exact remaining steps.
+
 ## ⚠️ Cost Constraint — Development Budget: $0
 
 Hartwich OS development must incur **zero additional spend**. Gavin's

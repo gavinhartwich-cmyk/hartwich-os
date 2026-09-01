@@ -4,7 +4,18 @@ import { isAllowedEmail } from "@/lib/auth/allowlist";
 
 // Routes reachable without a session. /api/inngest is called server-to-server
 // by Inngest itself (verified by its own signing key, not our session cookie).
-const PUBLIC_PATHS = ["/login", "/auth/error", "/api/inngest"];
+// /api/cron/* is called server-to-server by a Zo background loop (verified
+// by a CRON_SECRET bearer token inside the route, not our session cookie).
+// /book and /api/public/booking/* are the prospect-facing booking page
+// (Phase 6) — no login for prospects, obviously.
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/error",
+  "/api/inngest",
+  "/api/cron/",
+  "/book",
+  "/api/public/booking",
+];
 
 /**
  * Runs on every request. Refreshes the Supabase session, then enforces

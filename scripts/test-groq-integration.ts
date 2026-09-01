@@ -10,7 +10,8 @@
  *
  *   npx tsx scripts/test-groq-integration.ts
  */
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { enrichCompanyFromWebsite } from "../src/lib/ai/enrich-company";
 import { qualifyLead } from "../src/lib/ai/qualify-lead";
 import type { PlaceResult } from "../src/lib/integrations/google-places";

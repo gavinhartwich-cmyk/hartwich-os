@@ -100,6 +100,33 @@ export const leadSourceTypeEnum = pgEnum("lead_source_type", [
   "manual",
 ]);
 
+export const emailDraftStatusEnum = pgEnum("email_draft_status", [
+  "pending_review",
+  "approved",
+  "rejected",
+  "sent",
+]);
+
+export const bookingQuestionTypeEnum = pgEnum("booking_question_type", [
+  "text",
+  "textarea",
+  "email",
+  "phone",
+  "select",
+]);
+
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "confirmed",
+  "cancelled",
+]);
+
+export const discoveryRunStatusEnum = pgEnum("discovery_run_status", [
+  "running",
+  "completed", // hit the target count
+  "completed_partial", // exhausted the radius cap short of target — never lowers the quality bar to compensate
+  "failed",
+]);
+
 // ---------------------------------------------------------------------------
 // users — the allow-listed admin accounts (see §4 of the architecture doc)
 // ---------------------------------------------------------------------------
@@ -157,11 +184,25 @@ export const companies = pgTable("companies", {
   contactTier: contactTierEnum("contact_tier"),
   qualificationScore: integer("qualification_score"), // 0–100
   qualificationReasoning: text("qualification_reasoning"),
+
+  // --- Website enrichment (Phase 2 "Enrich" step) — captured once at
+  // discovery time so outreach drafting can reference real research
+  // about the business instead of a generic template. Null for leads
+  // discovered before this field existed, or with no website to read.
+  websiteSummary: text("website_summary"),
+  servicesOffered: jsonb("services_offered").$type<string[]>(),
+  apparentSize: text("apparent_size"),
   disqualifyReason: text("disqualify_reason"),
   status: companyStatusEnum("status").notNull().default("needs_review"),
 
   notes: text("notes"),
   createdBy: uuid("created_by").references(() => users.id),
+  
+  // --- Email warm-up tracking (Phase 3) ---
+  warmupStatus: text("warmup_status").notNull().default("not_started"),
+  warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
+  dailySendCount: integer("daily_send_count").notNull().default(0),
+  lastSendResetAt: timestamp("last_send_reset_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -298,6 +339,11 @@ export const tasks = pgTable("tasks", {
   description: text("description").notNull(),
   assignedTo: uuid("assigned_to").references(() => users.id),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // --- Calendar sync (Phase 5) ---
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  location: text("location"),
+  googleEventId: text("google_event_id"),
+  googleEventSyncedAt: timestamp("google_event_synced_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -328,6 +374,124 @@ export const leadSourcesConfig = pgTable("lead_sources_config", {
   // e.g. { keyword: "HVAC contractor", radiusMiles: 25, franchiseBlocklist: [...] }
   config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// discovery_runs — one row per "Find Leads" search, so the UI can show live
+// progress while the background job widens its search radius to hit the
+// user's requested qualified-lead count without loosening the quality bar.
+// ---------------------------------------------------------------------------
+
+export const discoveryRuns = pgTable("discovery_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  area: text("area").notNull(),
+  keyword: text("keyword").notNull(),
+  targetCount: integer("target_count").notNull(),
+  foundCount: integer("found_count").notNull().default(0),
+  radiusMiles: integer("radius_miles"), // current/final search radius from the area's center
+  status: discoveryRunStatusEnum("status").notNull().default("running"),
+  requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+
+
+// ---------------------------------------------------------------------------
+// email_drafts — pending-review emails (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const emailDrafts = pgTable("email_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  dealId: uuid("deal_id").references(() => deals.id),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  status: emailDraftStatusEnum("status").notNull().default("pending_review"),
+  aiRunId: uuid("ai_run_id").references(() => aiRuns.id),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedBy: uuid("rejected_by").references(() => users.id),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  sentFromEmailIndex: integer("sent_from_email_index"),
+  messageId: uuid("message_id").references(() => messages.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// booking_settings — single-row config for the public /book page (Phase 6).
+// Gavin-only: how far out prospects can book, meeting length, working
+// hours/days used to generate open slots (on top of real Google Calendar
+// busy time).
+// ---------------------------------------------------------------------------
+
+export const bookingSettings = pgTable("booking_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingWindowDays: integer("booking_window_days").notNull().default(30),
+  meetingDurationMinutes: integer("meeting_duration_minutes").notNull().default(30),
+  minNoticeHours: integer("min_notice_hours").notNull().default(4),
+  timezone: text("timezone").notNull().default("America/Winnipeg"),
+  // 0 = Sunday ... 6 = Saturday
+  workingDays: jsonb("working_days").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
+  workingHoursStart: text("working_hours_start").notNull().default("09:00"),
+  workingHoursEnd: text("working_hours_end").notNull().default("17:00"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// booking_questions — the customizable questionnaire shown after a prospect
+// picks a time. Three "core" rows (name/email/phone) are seeded and can't
+// be deleted from the UI since reminders depend on them; anything else is
+// free-form and fully editable (Phase 6).
+// ---------------------------------------------------------------------------
+
+export const bookingQuestions = pgTable("booking_questions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: text("label").notNull(),
+  fieldType: bookingQuestionTypeEnum("field_type").notNull().default("text"),
+  options: jsonb("options").$type<string[]>(),
+  required: boolean("required").notNull().default(true),
+  isCore: boolean("is_core").notNull().default(false),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// bookings — a confirmed slot on the public /book page (Phase 6). Optionally
+// linked back to a company/contact/deal when the link was sent from the CRM
+// (?company=&contact=&deal= query params), but works as a bare public link
+// too. answers stores the full questionnaire response keyed by question id;
+// prospectName/Email/Phone are pulled out of the core answers at booking
+// time so reminders don't need to re-parse the jsonb blob.
+// ---------------------------------------------------------------------------
+
+export const bookings = pgTable("bookings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
+  prospectName: text("prospect_name").notNull(),
+  prospectEmail: text("prospect_email").notNull(),
+  prospectPhone: text("prospect_phone"),
+  answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  status: bookingStatusEnum("status").notNull().default("confirmed"),
+  googleEventId: text("google_event_id"),
+  emailReminder24hSentAt: timestamp("email_reminder_24h_sent_at", { withTimezone: true }),
+  emailReminder1hSentAt: timestamp("email_reminder_1h_sent_at", { withTimezone: true }),
+  smsReminder24hSentAt: timestamp("sms_reminder_24h_sent_at", { withTimezone: true }),
+  smsReminder1hSentAt: timestamp("sms_reminder_1h_sent_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -400,4 +564,21 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   deal: one(deals, { fields: [tasks.dealId], references: [deals.id] }),
   company: one(companies, { fields: [tasks.companyId], references: [companies.id] }),
   assignee: one(users, { fields: [tasks.assignedTo], references: [users.id] }),
+}));
+
+
+export const emailDraftsRelations = relations(emailDrafts, ({ one }) => ({
+  company: one(companies, { fields: [emailDrafts.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [emailDrafts.contactId], references: [contacts.id] }),
+  deal: one(deals, { fields: [emailDrafts.dealId], references: [deals.id] }),
+  aiRun: one(aiRuns, { fields: [emailDrafts.aiRunId], references: [aiRuns.id] }),
+  approver: one(users, { fields: [emailDrafts.approvedBy], references: [users.id] }),
+  rejecter: one(users, { fields: [emailDrafts.rejectedBy], references: [users.id] }),
+  message: one(messages, { fields: [emailDrafts.messageId], references: [messages.id] }),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  company: one(companies, { fields: [bookings.companyId], references: [companies.id] }),
+  contact: one(contacts, { fields: [bookings.contactId], references: [contacts.id] }),
+  deal: one(deals, { fields: [bookings.dealId], references: [deals.id] }),
 }));

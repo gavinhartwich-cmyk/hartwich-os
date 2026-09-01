@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
-import NavLinks from "@/components/nav-links";
-import SignOutButton from "@/components/sign-out-button";
+import { isBookingAdmin } from "@/lib/auth/allowlist";
+import AppHeader from "@/components/app-header";
 
 /**
  * Shared shell for every authenticated page (board, companies, ...).
@@ -16,22 +16,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-neutral-200/80 bg-white/70 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/70">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-6">
-            <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
-              Hartwich OS
-            </span>
-            <NavLinks />
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-neutral-500">{user.name}</span>
-            <SignOutButton className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white" />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-6 py-8 animate-fade-in-up">{children}</main>
+    <div className="min-h-screen bg-[var(--background)]">
+      <AppHeader userName={user.name} showBookingAdmin={isBookingAdmin(user.email)} />
+      <main className="fade-in mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </div>
   );
 }
