@@ -39,12 +39,12 @@ export default function NavLinks({
             onClick={onNavigate}
             className={
               stacked
-                ? `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
+                ? `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
                     active
                       ? "bg-white text-black"
                       : "text-white/60 hover:bg-white/[0.06] hover:text-white/90"
                   }`
-                : `rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] ${
+                : `rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-150 ease-[var(--ease-spring)] hover:scale-[1.07] active:scale-[0.94] active:duration-75 ${
                     active
                       ? "bg-white text-black shadow-[0_0_16px_rgba(255,255,255,0.2)]"
                       : "text-white/50 hover:bg-white/[0.06] hover:text-white/90"

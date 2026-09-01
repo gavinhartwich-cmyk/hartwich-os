@@ -4,6 +4,8 @@ import StatusBadge from "@/components/status-badge";
 import { cityState } from "@/lib/utils/format";
 import { promoteToBoardAction, disqualifyLeadAction } from "./actions";
 import DiscoveryProgress from "./discovery-progress";
+import PageHeader from "@/components/page-header";
+import Reveal from "@/components/reveal";
 
 export default async function ReviewQueuePage({
   searchParams,
@@ -15,20 +17,15 @@ export default async function ReviewQueuePage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Qualified Leads</h1>
-          <p className="text-sm text-[var(--muted)]">
-            {companies.length} lead{companies.length === 1 ? "" : "s"} ready to reach out to
-          </p>
-        </div>
-        <Link
-          href="/leads/find"
-          className="btn-primary"
-        >
-          + Find Leads
-        </Link>
-      </div>
+      <PageHeader
+        title="Qualified Leads"
+        subtitle={`${companies.length} lead${companies.length === 1 ? "" : "s"} ready to reach out to`}
+        action={
+          <Link href="/leads/find" className="btn-primary">
+            + Find Leads
+          </Link>
+        }
+      />
 
       {runId && <DiscoveryProgress runId={runId} />}
 
@@ -38,10 +35,10 @@ export default async function ReviewQueuePage({
         </p>
       ) : (
         <ul className="space-y-3">
-          {companies.map((company) => (
+          {companies.map((company, i) => (
+            <Reveal key={company.id} delay={Math.min(i, 10) * 40}>
             <li
-              key={company.id}
-              className="surface-card p-4"
+              className="surface-card surface-card-hover p-4"
             >
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div>
@@ -88,6 +85,7 @@ export default async function ReviewQueuePage({
                 </div>
               </div>
             </li>
+            </Reveal>
           ))}
         </ul>
       )}

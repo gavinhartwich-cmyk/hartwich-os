@@ -22,8 +22,8 @@ export default function DealCard({ deal }: { deal: BoardDeal }) {
       {...attributes}
       suppressHydrationWarning
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`surface-card touch-none p-3 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.03] ${
-        isDragging ? "opacity-40" : ""
+      className={`surface-card touch-none p-3 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.03] hover:shadow-[0_10px_28px_-10px_rgba(0,0,0,0.6)] ${
+        isDragging ? "scale-[1.03] opacity-90 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.7)]" : ""
       }`}
     >
       <Link

@@ -19,6 +19,12 @@
   --accent: #f4f4f3;
   --accent-foreground: #050505;
   --glow: rgba(255, 255, 255, 0.06);
+
+  /* Two shared easings: --ease-smooth for calm entrances, --ease-spring for
+     anything the user actively triggers (hover, press, drag) so it has a
+     touch of overshoot — fast, but with a little life to it. */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @theme inline {
@@ -70,18 +76,20 @@ body {
 }
 
 /* Shared component classes — reused across every page so the look stays
-   consistent without re-deriving long utility strings everywhere. */
+   consistent without re-deriving long utility strings everywhere.
+   Interaction durations are kept short (120–200ms) with a spring easing
+   so hovers/presses feel immediate but still have a bit of snap to them. */
 @layer components {
   .surface-card {
-    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-300;
+    @apply rounded-2xl border border-white/[0.08] bg-[var(--surface)] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-200 ease-[var(--ease-spring)];
   }
 
   .surface-card-hover {
-    @apply hover:-translate-y-0.5 hover:border-white/[0.16] hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)];
+    @apply hover:-translate-y-1 hover:scale-[1.008] hover:border-white/[0.18] hover:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.65),0_0_0_1px_rgba(255,255,255,0.05)];
   }
 
   .btn-primary {
-    @apply relative isolate inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(255,255,255,0.22)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none;
+    @apply relative isolate inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition-all duration-200 ease-[var(--ease-spring)] hover:scale-[1.035] hover:shadow-[0_0_28px_rgba(255,255,255,0.25)] active:scale-[0.94] active:duration-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none;
   }
 
   .btn-primary::after {
@@ -90,7 +98,7 @@ body {
     inset: 0;
     background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
     transform: translateX(-120%);
-    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.45s var(--ease-smooth);
   }
 
   .btn-primary:hover::after {
@@ -98,19 +106,19 @@ body {
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-300 ease-out hover:scale-[1.015] hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.03] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-all duration-200 ease-[var(--ease-spring)] hover:scale-[1.03] hover:border-white/30 hover:bg-white/[0.07] active:scale-[0.94] active:duration-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-[var(--foreground)] active:scale-[0.96];
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--muted)] transition-all duration-150 ease-[var(--ease-spring)] hover:scale-[1.03] hover:bg-white/[0.06] hover:text-[var(--foreground)] active:scale-[0.93];
   }
 
   .input-field {
-    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-all duration-200 ease-out placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.05)];
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm text-[var(--foreground)] outline-none transition-all duration-150 ease-[var(--ease-smooth)] placeholder:text-white/25 focus:border-white/30 focus:bg-white/[0.04] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.06)];
   }
 
   .fade-in {
-    animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-in-up 0.4s var(--ease-spring) both;
   }
 
   .pill-nav {
@@ -121,20 +129,32 @@ body {
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes pulse-glow {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.45;
+    transform: scale(1);
   }
   50% {
-    opacity: 1;
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes float-drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(10px, -8px);
   }
 }
