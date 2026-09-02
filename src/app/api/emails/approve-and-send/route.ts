@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { emailDrafts } from "@/db/schema";
 import { pickAvailableAccount } from "@/lib/data/email-accounts";
 import { sendApprovedDraft } from "@/lib/emails/send-approved-draft";
+import { findRecentOutreach, DUPLICATE_OUTREACH_WINDOW_DAYS } from "@/lib/data/email-drafts";
 import { eq } from "drizzle-orm";
 
 const ApproveAndSendSchema = z.object({
@@ -38,6 +39,25 @@ export async function POST(request: NextRequest) {
     }
     if (!draft.contact.email) {
       return NextResponse.json({ error: "This contact has no email address" }, { status: 400 });
+    }
+
+    // Second layer of the duplicate guard (the first is at draft-creation
+    // time, /api/companies/[id]/outreach) — catches a duplicate however it
+    // got created, e.g. a draft that already existed before this check was
+    // added, or two drafts approved in quick succession before either one
+    // updated its status. excludeDraftId so approving *this* draft doesn't
+    // trip over itself.
+    const recentOther = await findRecentOutreach(draft.contactId, draft.id);
+    if (recentOther) {
+      return NextResponse.json(
+        {
+          error:
+            recentOther.status === "approved"
+              ? "This contact already has another outreach email queued to send."
+              : `This contact was already emailed on ${recentOther.sentAt!.toLocaleDateString()} (within the last ${DUPLICATE_OUTREACH_WINDOW_DAYS} days).`,
+        },
+        { status: 409 }
+      );
     }
 
     // Final subject/body — the edited version if the reviewer changed

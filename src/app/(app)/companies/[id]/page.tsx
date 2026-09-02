@@ -1,11 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/data/companies";
 import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
+import { findRecentOutreachForContacts } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
+import PageHeader from "@/components/page-header";
+import Link from "next/link";
 import ContactsPanel from "./contacts-panel";
 import ActivityPanel from "./activity-panel";
 import OutreachPanel from "./outreach-panel";
@@ -25,16 +27,15 @@ export default async function CompanyDetailPage({
   ]);
   if (!company) notFound();
 
+  const recentOutreachByContact = await findRecentOutreachForContacts(contacts.map((c) => c.id));
+
   return (
     <div className="mx-auto max-w-3xl fade-in">
-      <Link href="/companies" className="text-sm text-[var(--muted)] transition-colors hover:text-white">
-        ← Companies
-      </Link>
-
-      <div className="mt-1 mb-6 flex items-center gap-3">
-        <h1 className="text-xl font-light tracking-tight text-white">{company.name}</h1>
-        <StatusBadge status={company.status} />
-      </div>
+      <PageHeader
+        title={company.name}
+        back={{ href: "/companies", label: "Companies" }}
+        action={<StatusBadge status={company.status} />}
+      />
 
       <div className="grid gap-8 md:grid-cols-[1fr_260px]">
         <form action={updateCompanyAction} className="space-y-4">
@@ -122,6 +123,7 @@ export default async function CompanyDetailPage({
           companyId={company.id}
           currentUserId={currentUser.id}
           contacts={contacts}
+          recentOutreachByContact={recentOutreachByContact}
           research={{
             googleRating: company.googleRating,
             googleReviewCount: company.googleReviewCount,

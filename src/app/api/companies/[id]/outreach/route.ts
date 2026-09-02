@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { companies, contacts, emailDrafts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { draftOutreachEmail } from "@/lib/ai/draft-outreach";
+import { findRecentOutreach, DUPLICATE_OUTREACH_WINDOW_DAYS } from "@/lib/data/email-drafts";
 
 const DraftFromCompanySchema = z.object({
   contactId: z.string().uuid(),
@@ -39,6 +40,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (!contact.email) {
       return NextResponse.json({ error: "This contact has no email address" }, { status: 400 });
+    }
+
+    // Refuse to draft a duplicate — a contact with an email already queued
+    // to send, or sent within the last DUPLICATE_OUTREACH_WINDOW_DAYS days,
+    // doesn't need a second one. This is what actually stops the "silently
+    // queued, so I drafted another one" duplicate-send scenario, rather
+    // than just making the queued state visible after the fact.
+    const recent = await findRecentOutreach(contactId);
+    if (recent) {
+      return NextResponse.json(
+        {
+          error:
+            recent.status === "approved"
+              ? "This contact already has an outreach email queued to send — no need for another one."
+              : `This contact was already emailed on ${recent.sentAt!.toLocaleDateString()} (within the last ${DUPLICATE_OUTREACH_WINDOW_DAYS} days).`,
+          recentOutreach: recent,
+        },
+        { status: 409 }
+      );
     }
 
     const draft = await draftOutreachEmail({

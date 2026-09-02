@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Contact } from "@/lib/data/contacts";
+import type { RecentOutreach } from "@/lib/data/email-drafts";
 
 export type OutreachResearch = {
   googleRating: string | null;
@@ -18,11 +19,14 @@ export default function OutreachPanel({
   companyId,
   currentUserId,
   contacts,
+  recentOutreachByContact,
   research,
 }: {
   companyId: string;
   currentUserId: string;
   contacts: Contact[];
+  /** Queued/recently-sent drafts per contact — what blocks a duplicate, and what's shown as history. */
+  recentOutreachByContact: Record<string, RecentOutreach[]>;
   research: OutreachResearch;
 }) {
   const emailable = contacts.filter((c) => c.email);
@@ -33,6 +37,9 @@ export default function OutreachPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [outcome, setOutcome] = useState<{ at: Date; queued: boolean; message?: string } | null>(null);
+  // Seeded from the server, then kept in sync locally after a send so a
+  // second draft to the same contact gets blocked without a page refresh.
+  const [historyByContact, setHistoryByContact] = useState(recentOutreachByContact);
 
   const hasResearch =
     research.googleRating ||
@@ -41,8 +48,11 @@ export default function OutreachPanel({
     research.websiteSummary ||
     (research.servicesOffered && research.servicesOffered.length > 0);
 
+  const history = historyByContact[contactId] ?? [];
+  const blocking = history[0] ?? null;
+
   async function handleDraft() {
-    if (!contactId) return;
+    if (!contactId || blocking) return;
     setDrafting(true);
     setError("");
     setOutcome(null);
@@ -79,9 +89,24 @@ export default function OutreachPanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.reason || data.error || "Failed to send email");
+      const now = new Date();
+      setHistoryByContact((prev) => ({
+        ...prev,
+        [contactId]: [
+          {
+            id: draft.emailDraftId,
+            status: data.queued ? "approved" : "sent",
+            subject: draft.subject,
+            sentAt: data.queued ? null : now,
+            approvedAt: now,
+            createdAt: now,
+          },
+          ...(prev[contactId] ?? []),
+        ],
+      }));
       setDraft(null);
       setAngle("");
-      setOutcome({ at: new Date(), queued: !!data.queued, message: data.message });
+      setOutcome({ at: now, queued: !!data.queued, message: data.message });
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -132,7 +157,12 @@ export default function OutreachPanel({
             <label className="mb-1 block text-sm font-medium text-[var(--muted)]">To</label>
             <select
               value={contactId}
-              onChange={(e) => setContactId(e.target.value)}
+              onChange={(e) => {
+                setContactId(e.target.value);
+                setDraft(null);
+                setOutcome(null);
+                setError("");
+              }}
               className="w-full input-field"
             >
               {emailable.map((c) => (
@@ -142,6 +172,21 @@ export default function OutreachPanel({
               ))}
             </select>
           </div>
+
+          {history.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-[var(--muted)]">Outreach history</p>
+              <ul className="space-y-0.5 text-xs text-[var(--muted-2)]">
+                {history.map((h) => (
+                  <li key={h.id}>
+                    {h.status === "sent"
+                      ? `Sent ${h.sentAt!.toLocaleDateString()} — "${h.subject}"`
+                      : `Queued, waiting to send — "${h.subject}"`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--muted)]">
@@ -153,6 +198,7 @@ export default function OutreachPanel({
               placeholder="e.g. mention their weekend availability"
               rows={2}
               className="input-field"
+              disabled={!!blocking}
             />
           </div>
 
@@ -168,10 +214,17 @@ export default function OutreachPanel({
           {!draft ? (
             <button
               onClick={handleDraft}
-              disabled={drafting || !contactId}
+              disabled={drafting || !contactId || !!blocking}
+              title={
+                blocking
+                  ? blocking.status === "approved"
+                    ? "Already queued to send — no need for another one."
+                    : "Already emailed recently — see outreach history above."
+                  : undefined
+              }
               className="btn-primary"
             >
-              {drafting ? "Drafting…" : "Draft with AI"}
+              {drafting ? "Drafting…" : blocking ? "Already contacted" : "Draft with AI"}
             </button>
           ) : (
             <div className="space-y-3">
