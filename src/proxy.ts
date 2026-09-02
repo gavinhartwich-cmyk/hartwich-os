@@ -15,6 +15,10 @@ const PUBLIC_PATHS = [
   "/api/cron/",
   "/book",
   "/api/public/booking",
+  // Required by Google's OAuth consent screen (App domain -> Application
+  // privacy policy link) to move the project out of Testing mode — see
+  // src/app/privacy/page.tsx.
+  "/privacy",
 ];
 
 /**
