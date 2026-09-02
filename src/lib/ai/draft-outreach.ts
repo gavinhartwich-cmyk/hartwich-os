@@ -107,14 +107,30 @@ function buildResearchContext(company: OutreachCompanyContext): string {
   return lines.length > 0 ? lines.join("\n") : "- No additional research on file yet.";
 }
 
-const SYSTEM_PROMPT = `You are an expert sales email writer for Hartwich Labs, which helps HVAC businesses fix their online reputation and win more reviews.
+// Rewritten after a real-world quality review of the first 3 emails this
+// sent — see chat history around 2026-09-02. Two concrete defects drove
+// this: (1) the model fabricated a Hartwich Labs "track record" stat that
+// doesn't exist (the company had sent 3 emails total at the time), despite
+// the old prompt already saying not to invent facts — the ban needed to be
+// specific, not general. (2) subject lines and phrasing were templated
+// enough to repeat near-verbatim across different companies (2-4 word
+// subjects out-open 10-word ones per 2026 B2B cold-email data, and
+// templated-feeling copy is what actually gets AI email flagged as spam —
+// filters punish the pattern, not the fact that AI wrote it).
+const SYSTEM_PROMPT = `You are Gavin, writing a real, one-off cold email for Hartwich Labs, which helps HVAC businesses fix their online reputation and win more reviews. It should read like a specific person looked at this one business and decided to email them — not like a template with the company name swapped in.
 
-Draft a concise, personalized cold outreach email that:
-1. Opens with a specific, genuine observation drawn from the research provided (not a generic compliment) — reference something real about their reviews, size, services, or website if it's there.
+Draft a personalized cold outreach email that:
+1. Opens with a specific, genuine observation drawn from the research provided (not a generic compliment) — reference something real about their reviews, size, services, or website if it's there. If no contact name is known, greet generically ("Hi there," or similar) — never invent a name, and never address them by a job title as if it were their name.
 2. Connects that observation to a concrete way Hartwich Labs' review-management service could help them specifically.
-3. Ends with a clear, low-friction call-to-action (e.g. a quick call).
+3. Ends with ONE clear, low-friction call-to-action (e.g. a quick call) — never more than one ask.
 
-Keep it professional but conversational. Aim for 3-4 paragraphs, ~150-200 words. Do not invent facts that aren't in the research provided — if research is thin, keep the email more general rather than making things up.`;
+Hard rules:
+- Do not invent facts, numbers, or claims that aren't in the research provided — this includes results or stats about Hartwich Labs' own track record (e.g. never write something like "clients typically double their reviews in 90 days"). Hartwich Labs is a brand-new company with no such history to cite yet. If the research is thin, keep the email more general instead of making something up.
+- Subject line: 3-6 words, under 50 characters. A short, specific hook beats a complete-sentence summary of the pitch.
+- Avoid stock sales phrasing and reused formulas — no "solid foundation, yet...", no "steady flow of fresh reviews", no "amplify your online reputation". Write this one in your own words, as if it's the only cold email you're sending today.
+- Keep punctuation plain and varied — don't lean on em dashes as a crutch; ordinary sentences and commas read less like AI-generated text.
+
+Keep it professional but conversational, 120-160 words.`;
 
 export async function draftOutreachEmail({
   company,
@@ -132,8 +148,18 @@ export async function draftOutreachEmail({
 }): Promise<EmailDraft & { aiRunId: string }> {
   const researchContext = buildResearchContext(company);
 
+  // "Hiring Manager" used to be the fallback here when no named contact was
+  // known — wrong register entirely (that's recruiting boilerplate, not
+  // sales), and the model dutifully greeted a prospect with "Hi Hiring
+  // Manager," in a real sent email. Telling it plainly that no name is
+  // known lets the system prompt's own greeting rule (generic "Hi there,")
+  // take over instead.
+  const contactLine = contact?.name
+    ? `Contact: ${contact.name}${contact.title ? `, ${contact.title}` : ""}`
+    : "Contact: no named contact known — greet generically, do not invent a name.";
+
   const userPrompt = `Target company: ${company.name}${company.website ? ` (${company.website})` : ""}
-Contact: ${contact?.name || "Hiring Manager"}${contact?.title ? `, ${contact.title}` : ""}
+${contactLine}
 Your name: ${yourName}
 Your company: ${yourCompany}
 
