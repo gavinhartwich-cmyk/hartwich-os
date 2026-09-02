@@ -60,13 +60,15 @@ export async function structuredCompletion<T>(opts: {
   jsonSchema: Record<string, unknown>;
   zodSchema: z.ZodType<T>;
   model?: string;
+  /** Defaults to 1024 — override for call sites whose expected output (e.g. a full email body) runs longer than a compact JSON result. */
+  maxCompletionTokens?: number;
 }): Promise<StructuredCompletionResult<T> | null> {
   let response;
   for (let attempt = 0; ; attempt++) {
     try {
       response = await groq.chat.completions.create({
         model: opts.model ?? GROQ_STRUCTURED_MODEL,
-        max_completion_tokens: 1024,
+        max_completion_tokens: opts.maxCompletionTokens ?? 1024,
         messages: [
           { role: "system", content: opts.system },
           { role: "user", content: opts.user },
