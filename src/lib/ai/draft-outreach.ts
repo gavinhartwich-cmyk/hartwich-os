@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { groq } from "./groq";
+import { GROQ_STRUCTURED_MODEL } from "./groq-structured";
 import { db } from "@/db";
 import { aiRuns } from "@/db/schema";
 
@@ -126,7 +127,7 @@ Keep it professional but conversational. Aim for 3-4 paragraphs, ~150-200 words.
 
   try {
     const response = await groq.chat.completions.create({
-      model: "mixtral-8x7b-32768",
+      model: GROQ_STRUCTURED_MODEL,
       messages: [
         {
           role: "user",
@@ -134,7 +135,13 @@ Keep it professional but conversational. Aim for 3-4 paragraphs, ~150-200 words.
         },
       ],
       temperature: 0.7,
-      max_tokens: 500,
+      // max_completion_tokens, not the deprecated max_tokens (see
+      // groq-structured.ts) — GROQ_STRUCTURED_MODEL is a reasoning model, so
+      // part of this budget goes to hidden reasoning tokens before any of
+      // the visible subject/body is produced. 500 was tuned for a
+      // non-reasoning model and left too little room for a 150-200 word
+      // email on top of that.
+      max_completion_tokens: 1200,
     });
 
     const content = response.choices[0]?.message?.content;
@@ -171,7 +178,7 @@ Keep it professional but conversational. Aim for 3-4 paragraphs, ~150-200 words.
     await db.insert(aiRuns).values({
       id: aiRunId,
       targetType: "outreach_draft",
-      model: "mixtral-8x7b-32768",
+      model: GROQ_STRUCTURED_MODEL,
       prompt: prompt.substring(0, 500), // Store first 500 chars for audit
       tokensUsed,
       costEstimateUsd: costEstimate.toString(),
@@ -188,7 +195,7 @@ Keep it professional but conversational. Aim for 3-4 paragraphs, ~150-200 words.
     await db.insert(aiRuns).values({
       id: aiRunId,
       targetType: "outreach_draft",
-      model: "mixtral-8x7b-32768",
+      model: GROQ_STRUCTURED_MODEL,
       prompt: prompt.substring(0, 500),
       status: "failed",
       result: { error: String(error) },
