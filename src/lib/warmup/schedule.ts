@@ -1,17 +1,41 @@
 /**
- * Email warm-up scheduler for Hartwich OS
+ * Email warm-up scheduler for Hartwich OS.
  *
- * Manual warm-up strategy:
- * - Days 0-13: Max 5 emails/day
- * - Day 14+: Max 20 emails/day
+ * State is tracked per *sending account* (email_send_accounts, one row per
+ * rotating Gmail mailbox), not per recipient — a daily cap only means
+ * anything if it limits how much one mailbox sends across every company it
+ * emails today. See the comment on email_send_accounts in src/db/schema.ts
+ * for why this used to live on `companies` and didn't actually work.
  *
- * Daily counter resets at midnight Winnipeg time (UTC-5/-6)
+ * Ramp (cold-outreach guidance for a mailbox with no prior sending history —
+ * meaningfully slower than Gmail's own ~500/day account limit, because this
+ * is about the account's *reputation*, not its technical ceiling):
+ *   Days  1-3:   3/day
+ *   Days  4-7:   5/day
+ *   Days  8-14: 10/day
+ *   Days 15-21: 20/day
+ *   Days 22-28: 35/day
+ *   Days 29+:   50/day (steady state)
+ *
+ * Daily counter resets at midnight Winnipeg time (UTC-5/-6). Sends are also
+ * spaced a minimum interval apart — a daily cap alone doesn't stop a burst
+ * of 10 emails in 2 minutes, which reads as bot behavior even under the cap.
  */
 
 const WINNIPEG_TIMEZONE = "America/Winnipeg";
-const WARMUP_PHASE_1_DAYS = 14;
-const WARMUP_PHASE_1_DAILY_LIMIT = 5;
-const WARMUP_PHASE_2_DAILY_LIMIT = 20;
+
+// Ascending by day-threshold; the last matching entry (days >= from) wins.
+const WARMUP_RAMP: { fromDay: number; dailyLimit: number }[] = [
+  { fromDay: 0, dailyLimit: 3 },
+  { fromDay: 4, dailyLimit: 5 },
+  { fromDay: 8, dailyLimit: 10 },
+  { fromDay: 15, dailyLimit: 20 },
+  { fromDay: 22, dailyLimit: 35 },
+  { fromDay: 29, dailyLimit: 50 },
+];
+const WARMUP_TOTAL_RAMP_DAYS = 29;
+
+const MIN_SEND_SPACING_MINUTES = 25;
 
 /**
  * Winnipeg's UTC offset in minutes (e.g. -300 for UTC-5 during DST, -360 for
@@ -66,12 +90,11 @@ export function shouldResetDailyCounter(lastResetAt: Date | null | undefined): b
 }
 
 export function getWarmupPhase(startedAt: Date | null | undefined): {
-  phase: 1 | 2;
   daysSinceStart: number;
   dailyLimit: number;
 } {
   if (!startedAt) {
-    return { phase: 1, daysSinceStart: 0, dailyLimit: WARMUP_PHASE_1_DAILY_LIMIT };
+    return { daysSinceStart: 0, dailyLimit: WARMUP_RAMP[0].dailyLimit };
   }
 
   // Elapsed real time since a real timestamp — timezone-independent, so
@@ -79,40 +102,44 @@ export function getWarmupPhase(startedAt: Date | null | undefined): {
   // Winnipeg-shifted stand-in for it.
   const daysSinceStart = Math.floor((Date.now() - startedAt.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (daysSinceStart < WARMUP_PHASE_1_DAYS) {
-    return {
-      phase: 1,
-      daysSinceStart,
-      dailyLimit: WARMUP_PHASE_1_DAILY_LIMIT,
-    };
+  let dailyLimit = WARMUP_RAMP[0].dailyLimit;
+  for (const tier of WARMUP_RAMP) {
+    if (daysSinceStart >= tier.fromDay) dailyLimit = tier.dailyLimit;
   }
 
-  return {
-    phase: 2,
-    daysSinceStart,
-    dailyLimit: WARMUP_PHASE_2_DAILY_LIMIT,
-  };
+  return { daysSinceStart, dailyLimit };
 }
 
 export function canSendEmail(
   warmupStatus: string,
   dailySendCount: number,
-  warmupStartedAt: Date | null | undefined
+  warmupStartedAt: Date | null | undefined,
+  lastSentAt?: Date | null
 ): { allowed: boolean; reason?: string } {
+  if (warmupStatus !== "ready" && warmupStatus !== "warming_up" && warmupStatus !== "not_started") {
+    return { allowed: false, reason: `Invalid warmup status: ${warmupStatus}` };
+  }
+
+  // Minimum spacing between sends applies regardless of warm-up phase — a
+  // burst of sends looks bot-like even from a fully warmed-up account.
+  if (lastSentAt) {
+    const minutesSinceLastSend = (Date.now() - lastSentAt.getTime()) / 60_000;
+    if (minutesSinceLastSend < MIN_SEND_SPACING_MINUTES) {
+      const waitMinutes = Math.ceil(MIN_SEND_SPACING_MINUTES - minutesSinceLastSend);
+      return { allowed: false, reason: `Too soon since last send — wait ${waitMinutes} more minute(s).` };
+    }
+  }
+
   if (warmupStatus === "ready") {
     return { allowed: true };
   }
 
-  if (warmupStatus !== "warming_up" && warmupStatus !== "not_started") {
-    return { allowed: false, reason: `Invalid warmup status: ${warmupStatus}` };
-  }
-
-  const { phase, dailyLimit } = getWarmupPhase(warmupStartedAt);
+  const { dailyLimit } = getWarmupPhase(warmupStartedAt);
 
   if (dailySendCount >= dailyLimit) {
     return {
       allowed: false,
-      reason: `Daily limit reached (${dailyLimit}/day in phase ${phase}). Sent ${dailySendCount} today.`,
+      reason: `Daily limit reached (${dailyLimit}/day). Sent ${dailySendCount} today.`,
     };
   }
 
@@ -122,5 +149,5 @@ export function canSendEmail(
 export function isWarmupComplete(warmupStartedAt: Date | null | undefined): boolean {
   if (!warmupStartedAt) return false;
   const { daysSinceStart } = getWarmupPhase(warmupStartedAt);
-  return daysSinceStart >= WARMUP_PHASE_1_DAYS;
+  return daysSinceStart >= WARMUP_TOTAL_RAMP_DAYS;
 }

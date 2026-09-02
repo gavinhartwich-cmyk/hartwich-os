@@ -135,6 +135,15 @@ jobs:
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-reminders" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
+
+  send-queued-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flush warm-up-queued outreach emails
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-queued-emails" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"
 ```
 
 Then in the repo's **Settings → Secrets and variables → Actions**, add:

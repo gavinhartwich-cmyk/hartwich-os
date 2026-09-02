@@ -197,12 +197,7 @@ export const companies = pgTable("companies", {
 
   notes: text("notes"),
   createdBy: uuid("created_by").references(() => users.id),
-  
-  // --- Email warm-up tracking (Phase 3) ---
-  warmupStatus: text("warmup_status").notNull().default("not_started"),
-  warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
-  dailySendCount: integer("daily_send_count").notNull().default(0),
-  lastSendResetAt: timestamp("last_send_reset_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -423,6 +418,31 @@ export const emailDrafts = pgTable("email_drafts", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   sentFromEmailIndex: integer("sent_from_email_index"),
   messageId: uuid("message_id").references(() => messages.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// email_send_accounts — warm-up state for the 3 rotating Gmail sending
+// accounts (Phase 3). One row per account (accountIndex 0/1/2, matching
+// GMAIL_*_1/2/3 in env), created lazily on first use by
+// src/lib/data/email-accounts.ts.
+//
+// This used to live as warmup_status/daily_send_count/etc. columns on
+// `companies` — wrong entity: warm-up limits the sending account's daily
+// volume across every recipient, not any one recipient's own count, so
+// tracking it per-company meant the cap never actually engaged (every new
+// company started its own count at 0). Moved here so the daily cap and
+// minimum-spacing check in src/lib/warmup/schedule.ts apply per account.
+// ---------------------------------------------------------------------------
+
+export const emailSendAccounts = pgTable("email_send_accounts", {
+  accountIndex: integer("account_index").primaryKey(), // 0, 1, or 2
+  warmupStatus: text("warmup_status").notNull().default("not_started"),
+  warmupStartedAt: timestamp("warmup_started_at", { withTimezone: true }),
+  dailySendCount: integer("daily_send_count").notNull().default(0),
+  lastSendResetAt: timestamp("last_send_reset_at", { withTimezone: true }),
+  lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,0 +1,43 @@
+name: Cron jobs
+
+# Replaces the two Zo background loop scripts (scripts/sync-replies-loop.sh,
+# scripts/send-booking-reminders-loop.sh) now that the app runs on Vercel —
+# see MIGRATION.md. Each job just pings one of this app's own bearer-secret
+# cron routes; the actual work happens server-side.
+#
+# Requires two repo secrets (Settings -> Secrets and variables -> Actions):
+#   HARTWICH_APP_URL — the live Vercel URL, no trailing slash.
+#   CRON_SECRET       — same value as the CRON_SECRET env var on Vercel.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync-replies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync Gmail replies
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/sync-replies" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"
+
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send booking reminders
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"
+
+  send-queued-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flush warm-up-queued outreach emails
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-queued-emails" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"

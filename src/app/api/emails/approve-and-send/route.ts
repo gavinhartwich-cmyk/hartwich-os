@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { emailDrafts, messages, activities, companies } from "@/db/schema";
-import { sendEmailViaGmail, rotateEmailAccount, type EmailAccountIndex } from "@/lib/integrations/gmail-multi";
-import { canSendEmail, shouldResetDailyCounter, getTodayMidnightWinnipeg } from "@/lib/warmup/schedule";
+import { emailDrafts } from "@/db/schema";
+import { pickAvailableAccount } from "@/lib/data/email-accounts";
+import { sendApprovedDraft } from "@/lib/emails/send-approved-draft";
 import { eq } from "drizzle-orm";
 
 const ApproveAndSendSchema = z.object({
@@ -22,46 +22,22 @@ export async function POST(request: NextRequest) {
     const { emailDraftId, userId, subject: subjectOverride, body: bodyOverride } =
       ApproveAndSendSchema.parse(body);
 
-    // Fetch email draft
     const draft = await db.query.emailDrafts.findFirst({
       where: (ed, { eq }) => eq(ed.id, emailDraftId),
-      with: {
-        contact: true,
-        company: true,
-      },
+      with: { contact: true, company: true },
     });
 
     if (!draft) {
-      return NextResponse.json(
-        { error: "Email draft not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Email draft not found" }, { status: 404 });
     }
-
     if (draft.status !== "pending_review") {
       return NextResponse.json(
         { error: `Cannot approve email with status: ${draft.status}` },
         { status: 400 }
       );
     }
-
-    // Check warm-up limits
-    let company = draft.company;
-    let dailySendCount = company.dailySendCount || 0;
-    let lastSendResetAt = company.lastSendResetAt;
-
-    // Reset daily counter if needed
-    if (shouldResetDailyCounter(lastSendResetAt)) {
-      dailySendCount = 0;
-      lastSendResetAt = getTodayMidnightWinnipeg();
-    }
-
-    const canSend = canSendEmail(company.warmupStatus || "not_started", dailySendCount, company.warmupStartedAt);
-    if (!canSend.allowed) {
-      return NextResponse.json(
-        { error: "Cannot send", reason: canSend.reason },
-        { status: 400 }
-      );
+    if (!draft.contact.email) {
+      return NextResponse.json({ error: "This contact has no email address" }, { status: 400 });
     }
 
     // Final subject/body — the edited version if the reviewer changed
@@ -69,95 +45,52 @@ export async function POST(request: NextRequest) {
     const finalSubject = subjectOverride ?? draft.subject;
     const finalBody = bodyOverride ?? draft.body;
 
-    // Rotate email account — round-robin off whichever of the 3 Gmail
-    // accounts actually sent last (globally, not per-company: the point is
-    // spreading send volume evenly across accounts for warm-up), not a
-    // random guess. sentFromEmailIndex is already recorded on every send
-    // below, so the last one is the actual rotation state, no new column
-    // needed.
-    const lastSent = await db.query.emailDrafts.findFirst({
-      where: (ed, { eq }) => eq(ed.status, "sent"),
-      orderBy: (ed, { desc }) => desc(ed.sentAt),
-    });
-    const nextAccountIndex = rotateEmailAccount(
-      (lastSent?.sentFromEmailIndex as EmailAccountIndex | null) ?? undefined
-    );
-
-    // Send via Gmail
-    const { messageId, fromAddress } = await sendEmailViaGmail({
-      to: draft.contact.email!,
-      subject: finalSubject,
-      body: finalBody,
-      accountIndex: nextAccountIndex,
-    });
-
-    // Create activity record
-    const activity = await db
-      .insert(activities)
-      .values({
-        companyId: draft.companyId,
-        contactId: draft.contactId,
-        dealId: draft.dealId || undefined,
-        type: "email",
-        direction: "outbound",
-        bodyText: finalBody,
-        aiGenerated: !!draft.aiRunId,
-        createdBy: userId,
-      })
-      .returning();
-
-    // Create message record
-    const message = await db
-      .insert(messages)
-      .values({
-        activityId: activity[0].id,
-        provider: "gmail",
-        providerMessageId: messageId,
-        status: "sent",
-        toAddress: draft.contact.email!,
-        fromAddress,
-        subject: finalSubject,
-        body: finalBody,
-        generatedByAi: !!draft.aiRunId,
-        aiPromptVersion: draft.aiRunId || undefined,
-      })
-      .returning();
-
-    // Update email draft status (persisting any edits for the audit trail)
+    // Approval is recorded now, unconditionally — sending may not happen
+    // until later. Every sending account (email_send_accounts) has a daily
+    // warm-up cap and a minimum spacing between sends; if none has capacity
+    // right this second, the draft stays 'approved' with no sentAt, and the
+    // cron queue-flush job (/api/cron/send-queued-emails) sends it once one
+    // does. That also means a transient Gmail failure below leaves the
+    // draft in the same recoverable state — the queue flush retries it,
+    // nothing gets silently lost.
     await db
       .update(emailDrafts)
       .set({
         subject: finalSubject,
         body: finalBody,
-        status: "sent",
+        status: "approved",
         approvedBy: userId,
         approvedAt: new Date(),
-        sentAt: new Date(),
-        sentFromEmailIndex: nextAccountIndex,
-        messageId: message[0].id,
         updatedAt: new Date(),
       })
       .where(eq(emailDrafts.id, emailDraftId));
 
-    // Update company warm-up tracking
-    await db
-      .update(companies)
-      .set({
-        warmupStatus: company.warmupStatus === "not_started" ? "warming_up" : company.warmupStatus,
-        warmupStartedAt: company.warmupStartedAt || new Date(),
-        dailySendCount: dailySendCount + 1,
-        lastSendResetAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(companies.id, draft.companyId));
+    const accountIndex = await pickAvailableAccount();
+
+    if (accountIndex === null) {
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        message: "Approved — every account is at its warm-up limit right now. This will send automatically once one frees up.",
+      });
+    }
+
+    const { messageId, fromAddress, activityId } = await sendApprovedDraft(
+      draft,
+      finalSubject,
+      finalBody,
+      accountIndex,
+      userId
+    );
 
     return NextResponse.json({
       success: true,
+      queued: false,
       messageId,
-      activityId: activity[0].id,
-      accountUsed: nextAccountIndex,
+      activityId,
+      accountUsed: accountIndex,
       fromAddress,
-      message: `Email approved and sent to ${draft.contact.email} from account ${nextAccountIndex + 1}`,
+      message: `Email approved and sent to ${draft.contact.email} from account ${accountIndex + 1}`,
     });
   } catch (error) {
     console.error("Error approving and sending email:", error);

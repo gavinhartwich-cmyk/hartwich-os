@@ -32,7 +32,7 @@ export default function OutreachPanel({
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [sentAt, setSentAt] = useState<Date | null>(null);
+  const [outcome, setOutcome] = useState<{ at: Date; queued: boolean; message?: string } | null>(null);
 
   const hasResearch =
     research.googleRating ||
@@ -45,7 +45,7 @@ export default function OutreachPanel({
     if (!contactId) return;
     setDrafting(true);
     setError("");
-    setSentAt(null);
+    setOutcome(null);
     try {
       const res = await fetch(`/api/companies/${companyId}/outreach`, {
         method: "POST",
@@ -81,7 +81,7 @@ export default function OutreachPanel({
       if (!res.ok) throw new Error(data.reason || data.error || "Failed to send email");
       setDraft(null);
       setAngle("");
-      setSentAt(new Date());
+      setOutcome({ at: new Date(), queued: !!data.queued, message: data.message });
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -157,9 +157,11 @@ export default function OutreachPanel({
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
-          {sentAt && (
-            <p className="text-sm text-emerald-400">
-              Sent at {sentAt.toLocaleTimeString()}.
+          {outcome && (
+            <p className={`text-sm ${outcome.queued ? "text-amber-400" : "text-emerald-400"}`}>
+              {outcome.queued
+                ? (outcome.message ?? "Approved — queued, will send once an account has capacity.")
+                : `Sent at ${outcome.at.toLocaleTimeString()}.`}
             </p>
           )}
 

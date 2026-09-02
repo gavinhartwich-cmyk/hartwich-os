@@ -23,7 +23,15 @@ export default function EmailReviewColumn({ drafts, currentUserId }: EmailReview
       });
 
       if (res.ok) {
+        const data = await res.json();
         setDraftList((prev) => prev.filter((d) => d.id !== draftId));
+        // Sent-now is the common case and doesn't need a popup; queued is
+        // the one outcome worth a heads-up, since it's not what "Approve"
+        // normally means — every account is at its warm-up cap right now,
+        // so this will actually go out later once one frees up.
+        if (data.queued) {
+          alert(data.message ?? "Approved — queued, will send once an account has capacity.");
+        }
       } else {
         const err = await res.json();
         alert(`Error: ${err.error} - ${err.reason || err.details}`);
