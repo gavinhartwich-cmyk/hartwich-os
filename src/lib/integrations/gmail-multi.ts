@@ -11,9 +11,7 @@ import { google } from "googleapis";
  * - Reply detection across all accounts
  */
 
-type EmailAccountIndex = 0 | 1 | 2;
-
-const ACCOUNT_INDICES: EmailAccountIndex[] = [0, 1, 2];
+export type EmailAccountIndex = 0 | 1 | 2;
 
 // Initialize Gmail API client for a specific account
 function getGmailClient(accountIndex: EmailAccountIndex) {

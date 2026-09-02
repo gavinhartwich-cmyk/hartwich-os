@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { emailDrafts, messages, activities, companies } from "@/db/schema";
-import { sendEmailViaGmail, rotateEmailAccount } from "@/lib/integrations/gmail-multi";
+import { sendEmailViaGmail, rotateEmailAccount, type EmailAccountIndex } from "@/lib/integrations/gmail-multi";
 import { canSendEmail, shouldResetDailyCounter, getTodayMidnightWinnipeg } from "@/lib/warmup/schedule";
 import { eq } from "drizzle-orm";
 
@@ -69,11 +69,18 @@ export async function POST(request: NextRequest) {
     const finalSubject = subjectOverride ?? draft.subject;
     const finalBody = bodyOverride ?? draft.body;
 
-    // Rotate email account
+    // Rotate email account — round-robin off whichever of the 3 Gmail
+    // accounts actually sent last (globally, not per-company: the point is
+    // spreading send volume evenly across accounts for warm-up), not a
+    // random guess. sentFromEmailIndex is already recorded on every send
+    // below, so the last one is the actual rotation state, no new column
+    // needed.
+    const lastSent = await db.query.emailDrafts.findFirst({
+      where: (ed, { eq }) => eq(ed.status, "sent"),
+      orderBy: (ed, { desc }) => desc(ed.sentAt),
+    });
     const nextAccountIndex = rotateEmailAccount(
-      dailySendCount > 0
-        ? (Math.floor(Math.random() * 3) as any)
-        : undefined
+      (lastSent?.sentFromEmailIndex as EmailAccountIndex | null) ?? undefined
     );
 
     // Send via Gmail
