@@ -45,14 +45,14 @@ export function getFromEmailForAccount(accountIndex: EmailAccountIndex): string 
 }
 
 /**
- * Rotate to the next email account (round-robin)
- * On first call, returns 0, then 1, 2, 0, 1, 2, etc.
+ * RFC 2047 "encoded word" for a header value that isn't plain ASCII.
+ * Email headers are ASCII-only per RFC 5322 — an AI-drafted subject with a
+ * smart quote or em dash embedded as raw UTF-8 bytes gets the whole
+ * message rejected by Gmail's API rather than just mangling that character.
  */
-export function rotateEmailAccount(lastIndex?: EmailAccountIndex | null): EmailAccountIndex {
-  if (lastIndex === undefined || lastIndex === null) {
-    return 0; // Start with first account
-  }
-  return ((lastIndex + 1) % 3) as EmailAccountIndex;
+function encodeHeaderValue(value: string): string {
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
 
 /**
@@ -74,18 +74,25 @@ export async function sendEmailViaGmail({
     const gmail = getGmailClient(accountIndex);
     const fromAddress = getFromEmailForAccount(accountIndex);
 
-    // Build email in RFC 2822 format
+    // Build email in RFC 2822 format. Subject goes through RFC 2047
+    // encoded-word encoding when it's not plain ASCII — headers are
+    // ASCII-only per spec, and AI-drafted subjects routinely contain
+    // smart quotes/em dashes that would otherwise land as raw UTF-8 bytes
+    // in the header line and get the whole send rejected.
     const email = [
       `From: ${fromAddress}`,
       `To: ${to}`,
-      `Subject: ${subject}`,
+      `Subject: ${encodeHeaderValue(subject)}`,
       "Content-Type: text/plain; charset=utf-8",
       "",
       body,
     ].join("\n");
 
-    // Encode to base64
-    const base64Email = Buffer.from(email).toString("base64");
+    // Gmail's `raw` field requires base64url (RFC 4648 §5), not standard
+    // base64 — a `+` or `/` from ordinary base64 makes the API reject the
+    // whole message. Buffer's base64url encoding target handles both the
+    // alphabet substitution and stripping the `=` padding Gmail doesn't want.
+    const base64Email = Buffer.from(email).toString("base64url");
 
     const response = await gmail.users.messages.send({
       userId: "me",
