@@ -12,13 +12,16 @@ import { db } from "./index";
 import { pipelineStages, leadSourcesConfig, bookingSettings, bookingQuestions } from "./schema";
 
 const DEFAULT_STAGES = [
-  { name: "New Lead", position: 0, isWon: false, isLost: false },
-  { name: "Contacted", position: 1, isWon: false, isLost: false },
-  { name: "Engaged", position: 2, isWon: false, isLost: false },
-  { name: "Meeting Booked", position: 3, isWon: false, isLost: false },
-  { name: "Proposal Sent", position: 4, isWon: false, isLost: false },
-  { name: "Won", position: 5, isWon: true, isLost: false },
-  { name: "Lost", position: 6, isWon: false, isLost: true },
+  { name: "New Lead", position: 0, isWon: false, isLost: false, isContacted: false },
+  // isContacted marks this as the stage advanceDealToContacted (lib/data/deals.ts)
+  // moves a deal to once the first outbound email sends — a structural flag,
+  // not the name, so renaming this column later doesn't break that.
+  { name: "Contacted", position: 1, isWon: false, isLost: false, isContacted: true },
+  { name: "Engaged", position: 2, isWon: false, isLost: false, isContacted: false },
+  { name: "Meeting Booked", position: 3, isWon: false, isLost: false, isContacted: false },
+  { name: "Proposal Sent", position: 4, isWon: false, isLost: false, isContacted: false },
+  { name: "Won", position: 5, isWon: true, isLost: false, isContacted: false },
+  { name: "Lost", position: 6, isWon: false, isLost: true, isContacted: false },
 ];
 
 async function seedPipelineStages() {

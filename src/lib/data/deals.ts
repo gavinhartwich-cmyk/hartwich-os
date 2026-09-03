@@ -62,19 +62,23 @@ export async function moveDealStage(dealId: string, stageId: string) {
 }
 
 /**
- * Auto-advances a deal to "Contacted" the moment the first outbound email
- * actually sends (see sendApprovedDraft) — the same move a user would make
- * by hand dragging the card over, just automatic.
+ * Auto-advances a deal to the "contacted" stage the moment the first
+ * outbound email actually sends (see sendApprovedDraft) — the same move a
+ * user would make by hand dragging the card over, just automatic.
  *
- * Matches by *position* against the "Contacted" stage, not by an exact
- * "New Lead" name check (an earlier version required that and never fired
- * for anyone whose pipeline has stages ahead of "Contacted" that aren't
- * literally named "New Lead" — e.g. a "Researching" or "Qualified" column
- * before it). Any stage earlier than "Contacted" advances; a deal already
- * at "Contacted" or past it (Engaged, Won, ...) is left alone — this only
- * ever moves a card forward, never backward or out of wherever a human
- * put it. No-ops (doesn't throw) if there's no stage named "Contacted" —
- * a convenience, never something that should block or fail a send.
+ * Finds that stage by the isContacted flag, not by matching its display
+ * name — pipeline_stages.name is free text a user can rename anytime (see
+ * the isContacted column comment in db/schema.ts), so name-matching is
+ * exactly the kind of thing that silently breaks the moment someone
+ * renames a column or has an extra stage in between. isWon/isLost already
+ * use the same structural-flag approach for the same reason.
+ *
+ * Only moves the deal *forward*: if it's already at or past the contacted
+ * stage (by position — covers Engaged, Won, or anything else downstream),
+ * this is a no-op, so a later email on an already-progressed deal never
+ * yanks it backward. Also a no-op if no stage has isContacted set (e.g. a
+ * fresh pipeline where nothing's been flagged yet) — a convenience, never
+ * something that should block or fail a send.
  */
 export async function advanceDealToContacted(dealId: string): Promise<void> {
   const deal = await db.query.deals.findFirst({
@@ -86,7 +90,7 @@ export async function advanceDealToContacted(dealId: string): Promise<void> {
   const [contactedStage] = await db
     .select()
     .from(pipelineStages)
-    .where(eq(pipelineStages.name, "Contacted"))
+    .where(eq(pipelineStages.isContacted, true))
     .limit(1);
   if (!contactedStage) return;
 

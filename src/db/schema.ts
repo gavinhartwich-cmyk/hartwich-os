@@ -151,6 +151,15 @@ export const pipelineStages = pgTable("pipeline_stages", {
   position: integer("position").notNull(),
   isWon: boolean("is_won").notNull().default(false),
   isLost: boolean("is_lost").notNull().default(false),
+  // Marks whichever stage represents "we've reached out" — same idea as
+  // isWon/isLost above: a structural flag on the row, not the stage's
+  // display name, so renaming the column (or having something ahead of it
+  // that isn't literally called "New Lead") never breaks the automatic
+  // move to it after the first outbound email sends (see
+  // advanceDealToContacted in lib/data/deals.ts). Exactly one stage should
+  // have this set; nothing enforces that today since there's no stage-
+  // management UI yet, so it's on whoever edits pipeline_stages directly.
+  isContacted: boolean("is_contacted").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
