@@ -124,7 +124,7 @@ function normalizeCompanyName(name: string): string {
     .trim();
 }
 
-function websiteDomain(url: string | null): string | null {
+export function websiteDomain(url: string | null): string | null {
   if (!url) return null;
   try {
     return new URL(url).hostname.replace(/^www\./, "").toLowerCase();

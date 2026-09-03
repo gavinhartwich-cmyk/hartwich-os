@@ -4,10 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
-import { updateCompany } from "@/lib/data/companies";
+import { getCompanyById, updateCompany, websiteDomain } from "@/lib/data/companies";
 import { createDeal } from "@/lib/data/deals";
-import { createContact, deleteContact, setPrimaryContact } from "@/lib/data/contacts";
+import {
+  createContact,
+  deleteContact,
+  listContactsForCompany,
+  setPrimaryContact,
+} from "@/lib/data/contacts";
 import { createActivity } from "@/lib/data/activities";
+import { findOwnerContact } from "@/lib/integrations/apollo";
 
 const CompanyFormSchema = z.object({
   id: z.string().uuid(),
@@ -99,6 +105,57 @@ export async function deleteContactAction(formData: FormData) {
   const contactId = z.string().uuid().parse(formData.get("contactId"));
   await deleteContact(contactId);
   revalidatePath(`/companies/${companyId}`);
+}
+
+/**
+ * "Find owner" button on the company page — looks up the likely
+ * owner/decision-maker via Apollo (LinkedIn-sourced contact data; see the
+ * comment on findOwnerContact for why this goes through Apollo rather than
+ * a direct LinkedIn scrape) and, if found, adds them as a contact. A
+ * manual, per-company action rather than something run automatically for
+ * every lead — Apollo enrichment spends a paid credit per lookup, unlike
+ * the free-tier Groq calls the rest of enrichment relies on.
+ */
+export async function findOwnerAction(formData: FormData) {
+  const user = await getCurrentAppUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const companyId = z.string().uuid().parse(formData.get("companyId"));
+  const company = await getCompanyById(companyId);
+  if (!company) {
+    redirect(`/companies/${companyId}?ownerLookup=error`);
+  }
+
+  const domain = websiteDomain(company.website);
+  if (!domain) {
+    redirect(`/companies/${companyId}?ownerLookup=no_website`);
+  }
+
+  const owner = await findOwnerContact(domain);
+  if (!owner) {
+    redirect(`/companies/${companyId}?ownerLookup=not_found`);
+  }
+
+  const existingContacts = await listContactsForCompany(companyId);
+  const alreadyHave = existingContacts.some(
+    (c) => c.name?.toLowerCase() === owner.name.toLowerCase()
+  );
+
+  if (!alreadyHave) {
+    await createContact(companyId, {
+      name: owner.name,
+      title: owner.title,
+      email: owner.email,
+      linkedinUrl: owner.linkedinUrl,
+      isPrimary: existingContacts.length === 0,
+      source: "apollo",
+    });
+  }
+
+  revalidatePath(`/companies/${companyId}`);
+  redirect(`/companies/${companyId}?ownerLookup=${alreadyHave ? "already_have" : "found"}`);
 }
 
 const ActivityFormSchema = z.object({

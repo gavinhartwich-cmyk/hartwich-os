@@ -4,6 +4,7 @@ import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
 import { findRecentOutreachForContacts } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
+import { isApolloConfigured } from "@/lib/integrations/apollo";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
 import PageHeader from "@/components/page-header";
@@ -13,12 +14,23 @@ import ActivityPanel from "./activity-panel";
 import OutreachPanel from "./outreach-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
+const OWNER_LOOKUP_MESSAGES: Record<string, { tone: "ok" | "muted"; text: string }> = {
+  found: { tone: "ok", text: "Found the owner and added them as a contact." },
+  already_have: { tone: "muted", text: "Apollo found the owner, but they're already a contact here." },
+  not_found: { tone: "muted", text: "Apollo didn't find an owner/decision-maker for this company." },
+  no_website: { tone: "muted", text: "Add a website first — the owner lookup matches by company domain." },
+  error: { tone: "muted", text: "Something went wrong looking up the owner." },
+};
+
 export default async function CompanyDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ownerLookup?: string }>;
 }) {
   const { id } = await params;
+  const { ownerLookup } = await searchParams;
   const [company, contacts, activities, currentUser] = await Promise.all([
     getCompanyById(id),
     listContactsForCompany(id),
@@ -27,6 +39,7 @@ export default async function CompanyDetailPage({
   ]);
   if (!company) notFound();
 
+  const ownerLookupMessage = ownerLookup ? OWNER_LOOKUP_MESSAGES[ownerLookup] : undefined;
   const recentOutreachByContact = await findRecentOutreachForContacts(contacts.map((c) => c.id));
 
   return (
@@ -115,7 +128,16 @@ export default async function CompanyDetailPage({
 
       <div className="mt-8 grid gap-8 md:grid-cols-[1fr_260px]">
         <ActivityPanel companyId={company.id} activities={activities} contacts={contacts} />
-        <ContactsPanel companyId={company.id} contacts={contacts} />
+        <ContactsPanel
+          companyId={company.id}
+          companyName={company.name}
+          companyCity={company.city}
+          companyState={company.state}
+          hasWebsite={Boolean(company.website)}
+          apolloConfigured={isApolloConfigured()}
+          contacts={contacts}
+          ownerLookupMessage={ownerLookupMessage}
+        />
       </div>
 
       {currentUser && (

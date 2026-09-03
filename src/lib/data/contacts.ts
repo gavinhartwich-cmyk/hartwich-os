@@ -12,6 +12,8 @@ export type ContactInput = {
   phone?: string | null;
   linkedinUrl?: string | null;
   isPrimary?: boolean;
+  /** Defaults to "manual" — the contacts-panel form. Owner lookups pass "apollo". */
+  source?: "google_places" | "apollo" | "manual";
 };
 
 export async function listContactsForCompany(companyId: string) {
@@ -45,7 +47,7 @@ export async function createContact(companyId: string, input: ContactInput) {
         phone: input.phone || null,
         linkedinUrl: input.linkedinUrl || null,
         isPrimary: input.isPrimary ?? false,
-        source: "manual",
+        source: input.source ?? "manual",
       })
       .returning();
     return contact;
