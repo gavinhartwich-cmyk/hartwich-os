@@ -62,21 +62,26 @@ export async function moveDealStage(dealId: string, stageId: string) {
 }
 
 /**
- * Auto-advances a deal from "New Lead" to "Contacted" the moment the first
- * outbound email actually sends (see sendApprovedDraft) — the same move a
- * user would make by hand dragging the card over, just automatic. No-ops
- * if the deal isn't currently sitting in "New Lead" (already moved, or
- * dragged somewhere else manually — never yanks a deal backward or out of
- * wherever a human put it), or if no stage named "Contacted" exists (e.g.
- * the pipeline's been renamed) — this is a convenience, never something
- * that should block or fail a send.
+ * Auto-advances a deal to "Contacted" the moment the first outbound email
+ * actually sends (see sendApprovedDraft) — the same move a user would make
+ * by hand dragging the card over, just automatic.
+ *
+ * Matches by *position* against the "Contacted" stage, not by an exact
+ * "New Lead" name check (an earlier version required that and never fired
+ * for anyone whose pipeline has stages ahead of "Contacted" that aren't
+ * literally named "New Lead" — e.g. a "Researching" or "Qualified" column
+ * before it). Any stage earlier than "Contacted" advances; a deal already
+ * at "Contacted" or past it (Engaged, Won, ...) is left alone — this only
+ * ever moves a card forward, never backward or out of wherever a human
+ * put it. No-ops (doesn't throw) if there's no stage named "Contacted" —
+ * a convenience, never something that should block or fail a send.
  */
 export async function advanceDealToContacted(dealId: string): Promise<void> {
   const deal = await db.query.deals.findFirst({
     where: (d, { eq }) => eq(d.id, dealId),
     with: { stage: true },
   });
-  if (!deal || deal.stage.name !== "New Lead") return;
+  if (!deal) return;
 
   const [contactedStage] = await db
     .select()
@@ -84,6 +89,8 @@ export async function advanceDealToContacted(dealId: string): Promise<void> {
     .where(eq(pipelineStages.name, "Contacted"))
     .limit(1);
   if (!contactedStage) return;
+
+  if (deal.stage.position >= contactedStage.position) return;
 
   await moveDealStage(dealId, contactedStage.id);
 }

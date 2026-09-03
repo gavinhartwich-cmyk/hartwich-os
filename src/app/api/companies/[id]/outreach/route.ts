@@ -5,6 +5,7 @@ import { companies, contacts, emailDrafts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { draftOutreachEmail } from "@/lib/ai/draft-outreach";
 import { findRecentOutreach, DUPLICATE_OUTREACH_WINDOW_DAYS } from "@/lib/data/email-drafts";
+import { listDealsForCompany } from "@/lib/data/deals";
 
 const DraftFromCompanySchema = z.object({
   contactId: z.string().uuid(),
@@ -69,11 +70,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       yourCompany: "Hartwich Labs",
     });
 
+    // Most recent deal for this company — the one on the board right now.
+    // Without this, emailDrafts.dealId stays null forever and
+    // advanceDealToContacted (send-approved-draft.ts) never has a deal to
+    // move: the card just sits in whatever column it started in no matter
+    // how many emails go out. A company with no deal yet (still in the
+    // review queue) has nothing to attach to, which is fine — there's no
+    // board card to move either.
+    const [mostRecentDeal] = await listDealsForCompany(companyId);
+
     const [emailDraft] = await db
       .insert(emailDrafts)
       .values({
         companyId,
         contactId,
+        dealId: mostRecentDeal?.id,
         subject: draft.subject,
         body: draft.body,
         status: "pending_review",
