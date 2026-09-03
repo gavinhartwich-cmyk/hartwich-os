@@ -15,6 +15,10 @@ function bbbSearchUrl(name: string, city: string | null, state: string | null): 
   return `https://www.bbb.org/search?${params.toString()}`;
 }
 
+function linkedinSearchUrl(name: string): string {
+  return `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(name)}`;
+}
+
 export default function ContactsPanel({
   companyId,
   companyName,
@@ -127,7 +131,10 @@ export default function ContactsPanel({
           </form>
         ) : (
           <p className="text-xs text-[var(--muted-2)]">
-            Set APOLLO_API_KEY to look up owners automatically.
+            Automatic lookup needs an Apollo Organization plan ($119+/user/mo,
+            3-seat minimum) — not something to turn on casually. The two
+            links below cost nothing; they just open each site&apos;s own search
+            for a manual check.
           </p>
         )}
         <a
@@ -137,6 +144,14 @@ export default function ContactsPanel({
           className="block text-center text-xs text-[var(--muted)] transition-colors hover:text-white"
         >
           Search BBB for this business ↗
+        </a>
+        <a
+          href={linkedinSearchUrl(companyName)}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-center text-xs text-[var(--muted)] transition-colors hover:text-white"
+        >
+          Search LinkedIn for this business ↗
         </a>
       </div>
 
