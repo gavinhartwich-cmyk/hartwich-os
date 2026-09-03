@@ -5,6 +5,7 @@ import { listActivitiesForCompany } from "@/lib/data/activities";
 import { findRecentOutreachForContacts } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import { isApolloConfigured } from "@/lib/integrations/apollo";
+import { isTavilyConfigured } from "@/lib/integrations/tavily";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
 import PageHeader from "@/components/page-header";
@@ -16,9 +17,12 @@ import { createDealAction, updateCompanyAction } from "./actions";
 
 const OWNER_LOOKUP_MESSAGES: Record<string, { tone: "ok" | "muted"; text: string }> = {
   found: { tone: "ok", text: "Found the owner and added them as a contact." },
-  already_have: { tone: "muted", text: "Apollo found the owner, but they're already a contact here." },
-  not_found: { tone: "muted", text: "Apollo didn't find an owner/decision-maker for this company." },
-  no_website: { tone: "muted", text: "Add a website first — the owner lookup matches by company domain." },
+  already_have: { tone: "muted", text: "Found the owner, but they're already a contact here." },
+  not_found: { tone: "muted", text: "Couldn't find an owner/decision-maker for this company." },
+  no_website: {
+    tone: "muted",
+    text: "Apollo needs a website to match by domain — add one, or use the free search lookup instead.",
+  },
   error: { tone: "muted", text: "Something went wrong looking up the owner." },
 };
 
@@ -135,6 +139,7 @@ export default async function CompanyDetailPage({
           companyState={company.state}
           hasWebsite={Boolean(company.website)}
           apolloConfigured={isApolloConfigured()}
+          tavilyConfigured={isTavilyConfigured()}
           contacts={contacts}
           ownerLookupMessage={ownerLookupMessage}
         />

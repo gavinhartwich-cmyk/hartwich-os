@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/contacts";
 import { createActivity } from "@/lib/data/activities";
 import { findOwnerContact } from "@/lib/integrations/apollo";
+import { findDecisionMakerViaSearch } from "@/lib/ai/find-decision-maker";
 
 const CompanyFormSchema = z.object({
   id: z.string().uuid(),
@@ -108,15 +109,58 @@ export async function deleteContactAction(formData: FormData) {
 }
 
 /**
- * "Find owner" button on the company page — looks up the likely
+ * "Find owner" button on the company page (free path) — a Tavily web
+ * search scoped to bbb.org + linkedin.com, read by Groq for a name (see
+ * findDecisionMakerViaSearch). This is the automated stand-in for
+ * manually checking BBB/LinkedIn: same sources, no scraping, no paid API.
+ * Works without a website (unlike the Apollo path below, which needs a
+ * domain to match on) since it searches by company name/location instead.
+ */
+export async function findOwnerViaSearchAction(formData: FormData) {
+  const user = await getCurrentAppUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const companyId = z.string().uuid().parse(formData.get("companyId"));
+  const company = await getCompanyById(companyId);
+  if (!company) {
+    redirect(`/companies/${companyId}?ownerLookup=error`);
+  }
+
+  const location = [company.city, company.state].filter(Boolean).join(", ") || null;
+  const dm = await findDecisionMakerViaSearch({ companyName: company.name, location });
+  if (!dm) {
+    redirect(`/companies/${companyId}?ownerLookup=not_found`);
+  }
+
+  const existingContacts = await listContactsForCompany(companyId);
+  const alreadyHave = existingContacts.some((c) => c.name?.toLowerCase() === dm.name.toLowerCase());
+
+  if (!alreadyHave) {
+    await createContact(companyId, {
+      name: dm.name,
+      title: dm.title,
+      linkedinUrl: dm.linkedinUrl,
+      isPrimary: existingContacts.length === 0,
+      source: "google_places", // "found during automated research," same label the site-scrape path uses
+    });
+  }
+
+  revalidatePath(`/companies/${companyId}`);
+  redirect(`/companies/${companyId}?ownerLookup=${alreadyHave ? "already_have" : "found"}`);
+}
+
+/**
+ * "Find owner via Apollo" button (paid path) — looks up the likely
  * owner/decision-maker via Apollo (LinkedIn-sourced contact data; see the
  * comment on findOwnerContact for why this goes through Apollo rather than
  * a direct LinkedIn scrape) and, if found, adds them as a contact. A
  * manual, per-company action rather than something run automatically for
  * every lead — Apollo enrichment spends a paid credit per lookup, unlike
- * the free-tier Groq calls the rest of enrichment relies on.
+ * the free Tavily/Groq path above.
  */
-export async function findOwnerAction(formData: FormData) {
+export async function findOwnerViaApolloAction(formData: FormData) {
   const user = await getCurrentAppUser();
   if (!user) {
     redirect("/login");

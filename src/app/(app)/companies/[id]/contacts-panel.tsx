@@ -1,6 +1,12 @@
 import FormField from "@/components/form-field";
 import type { Contact } from "@/lib/data/contacts";
-import { createContactAction, deleteContactAction, findOwnerAction, setPrimaryContactAction } from "./actions";
+import {
+  createContactAction,
+  deleteContactAction,
+  findOwnerViaApolloAction,
+  findOwnerViaSearchAction,
+  setPrimaryContactAction,
+} from "./actions";
 
 const SOURCE_LABELS: Record<Contact["source"], string> = {
   apollo: "via Apollo · LinkedIn",
@@ -26,6 +32,7 @@ export default function ContactsPanel({
   companyState,
   hasWebsite,
   apolloConfigured,
+  tavilyConfigured,
   contacts,
   ownerLookupMessage,
 }: {
@@ -35,6 +42,7 @@ export default function ContactsPanel({
   companyState: string | null;
   hasWebsite: boolean;
   apolloConfigured: boolean;
+  tavilyConfigured: boolean;
   contacts: Contact[];
   ownerLookupMessage?: { tone: "ok" | "muted"; text: string };
 }) {
@@ -117,8 +125,21 @@ export default function ContactsPanel({
 
       <div className="mt-3 space-y-2">
         <p className="text-xs font-medium text-[var(--muted)]">Find the owner</p>
-        {apolloConfigured ? (
-          <form action={findOwnerAction}>
+        {tavilyConfigured ? (
+          <form action={findOwnerViaSearchAction}>
+            <input type="hidden" name="companyId" value={companyId} />
+            <button type="submit" className="btn-primary w-full text-xs">
+              Search BBB + LinkedIn for the owner
+            </button>
+          </form>
+        ) : (
+          <p className="text-xs text-[var(--muted-2)]">
+            Set TAVILY_API_KEY for a free, automatic BBB/LinkedIn owner search
+            (also runs during lead discovery — see .env.example).
+          </p>
+        )}
+        {apolloConfigured && (
+          <form action={findOwnerViaApolloAction}>
             <input type="hidden" name="companyId" value={companyId} />
             <button
               type="submit"
@@ -126,17 +147,11 @@ export default function ContactsPanel({
               className="btn-ghost w-full text-xs disabled:cursor-not-allowed disabled:opacity-50"
               title={hasWebsite ? undefined : "Add a website first — this matches by company domain."}
             >
-              Look up via Apollo (LinkedIn data)
+              Look up via Apollo instead (paid)
             </button>
           </form>
-        ) : (
-          <p className="text-xs text-[var(--muted-2)]">
-            Automatic lookup needs an Apollo Organization plan ($119+/user/mo,
-            3-seat minimum) — not something to turn on casually. The two
-            links below cost nothing; they just open each site&apos;s own search
-            for a manual check.
-          </p>
         )}
+        <p className="pt-1 text-xs text-[var(--muted-2)]">Or check by hand:</p>
         <a
           href={bbbSearchUrl(companyName, companyCity, companyState)}
           target="_blank"

@@ -2,6 +2,7 @@ import { inngest } from "../client";
 import { searchHvacCompanies, getPlaceReviewSnippets } from "@/lib/integrations/google-places";
 import { findDuplicateCompany, createDiscoveredCompany } from "@/lib/data/companies";
 import { enrichCompanyFromWebsite } from "@/lib/ai/enrich-company";
+import { findDecisionMakerViaSearch, overlayDecisionMaker } from "@/lib/ai/find-decision-maker";
 import { qualifyLead } from "@/lib/ai/qualify-lead";
 import { getActiveLeadSourceConfig } from "@/lib/data/lead-sources";
 import { notifySlack } from "@/lib/integrations/slack";
@@ -54,10 +55,20 @@ export const discoverLeads = inngest.createFunction(
         const dup = await findDuplicateCompany({ name: place.name, website: place.website });
         if (dup) return "duplicate" as const;
 
-        const [enrichment, reviewSnippets] = await Promise.all([
+        const [websiteEnrichment, reviewSnippets] = await Promise.all([
           enrichCompanyFromWebsite(place.website),
           getPlaceReviewSnippets(place.placeId),
         ]);
+        let enrichment = websiteEnrichment;
+
+        // The website scrape is the primary source, but most small-business
+        // sites don't name an owner. When it comes up empty, fall back to a
+        // web search scoped to BBB + LinkedIn (see findDecisionMakerViaSearch)
+        // before giving up — this is what actually finds most owners.
+        if (!enrichment?.contactName) {
+          const dm = await findDecisionMakerViaSearch({ companyName: place.name, location: area });
+          if (dm) enrichment = overlayDecisionMaker(enrichment, dm);
+        }
 
         const qualification = await qualifyLead({
           place,
@@ -67,7 +78,7 @@ export const discoverLeads = inngest.createFunction(
           autoFileThreshold: configValues.autoFileThreshold,
         });
 
-        await createDiscoveredCompany({ place, placeId: place.placeId, qualification });
+        await createDiscoveredCompany({ place, placeId: place.placeId, qualification, enrichment });
 
         if (qualification.disqualifyReason) return "disqualified" as const;
         return qualification.autoFile ? ("qualified" as const) : ("needs_review" as const);
