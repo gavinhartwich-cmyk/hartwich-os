@@ -60,3 +60,30 @@ export async function moveDealStage(dealId: string, stageId: string) {
     .returning();
   return deal;
 }
+
+/**
+ * Auto-advances a deal from "New Lead" to "Contacted" the moment the first
+ * outbound email actually sends (see sendApprovedDraft) — the same move a
+ * user would make by hand dragging the card over, just automatic. No-ops
+ * if the deal isn't currently sitting in "New Lead" (already moved, or
+ * dragged somewhere else manually — never yanks a deal backward or out of
+ * wherever a human put it), or if no stage named "Contacted" exists (e.g.
+ * the pipeline's been renamed) — this is a convenience, never something
+ * that should block or fail a send.
+ */
+export async function advanceDealToContacted(dealId: string): Promise<void> {
+  const deal = await db.query.deals.findFirst({
+    where: (d, { eq }) => eq(d.id, dealId),
+    with: { stage: true },
+  });
+  if (!deal || deal.stage.name !== "New Lead") return;
+
+  const [contactedStage] = await db
+    .select()
+    .from(pipelineStages)
+    .where(eq(pipelineStages.name, "Contacted"))
+    .limit(1);
+  if (!contactedStage) return;
+
+  await moveDealStage(dealId, contactedStage.id);
+}

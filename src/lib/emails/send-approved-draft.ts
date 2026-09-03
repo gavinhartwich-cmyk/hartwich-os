@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { emailDrafts, messages, activities } from "@/db/schema";
 import { sendEmailViaGmail } from "@/lib/integrations/gmail-multi";
 import { recordEmailSent, type EmailAccountIndex } from "@/lib/data/email-accounts";
+import { advanceDealToContacted } from "@/lib/data/deals";
 import { eq } from "drizzle-orm";
 
 type ApprovedDraft = {
@@ -81,6 +82,10 @@ export async function sendApprovedDraft(
     .where(eq(emailDrafts.id, draft.id));
 
   await recordEmailSent(accountIndex);
+
+  if (draft.dealId) {
+    await advanceDealToContacted(draft.dealId);
+  }
 
   return { messageId, fromAddress, activityId: activity.id };
 }
