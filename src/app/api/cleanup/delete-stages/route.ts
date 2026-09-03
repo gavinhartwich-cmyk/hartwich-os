@@ -3,15 +3,15 @@ import { pipelineStages, deals } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 /**
- * Removes the "Research" and "Qualified" board columns — companion to
- * delete-researching/route.ts, same idea, generalized to a name list.
- * Refuses to delete a stage that still has deals sitting in it (the
+ * Removes the "Researching" and "Qualified" board columns — supersedes the
+ * old delete-researching/route.ts (same stage, generalized to a name
+ * list). Refuses to delete a stage that still has deals sitting in it (the
  * deals.stageId FK has no cascade) rather than silently reassigning or
  * losing them — move those deals to another column on the board first,
  * then re-run this.
  * Use DELETE method to trigger: fetch("/api/cleanup/delete-stages", { method: "DELETE" })
  */
-const STAGE_NAMES_TO_REMOVE = ["Research", "Qualified"];
+const STAGE_NAMES_TO_REMOVE = ["Researching", "Qualified"];
 
 export async function DELETE() {
   try {
@@ -44,7 +44,7 @@ export async function DELETE() {
       results,
       message:
         stages.length === 0
-          ? "No 'Research' or 'Qualified' stage found — nothing to remove."
+          ? "No 'Researching' or 'Qualified' stage found — nothing to remove."
           : skipped.length > 0
             ? `Some stages still have deals in them — move those cards to another column first: ${skipped
                 .map((r) => `${r.name} (${r.dealsBlocking})`)

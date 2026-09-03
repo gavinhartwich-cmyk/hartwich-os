@@ -62,7 +62,7 @@ export default function CleanupPage() {
   }
 
   async function removeStages() {
-    if (!confirm('Remove the "Research" and "Qualified" columns from the board?')) {
+    if (!confirm('Remove the "Researching" and "Qualified" columns from the board?')) {
       return;
     }
 
@@ -102,7 +102,7 @@ export default function CleanupPage() {
         <div className="surface-card mb-6 p-6">
           <h2 className="font-semibold text-white">Board columns</h2>
           <p className="mt-1 text-sm text-white/70">
-            Removes the &quot;Research&quot; and &quot;Qualified&quot; columns from the board. Any
+            Removes the &quot;Researching&quot; and &quot;Qualified&quot; columns from the board. Any
             column still holding cards is left alone — move those cards to another column first,
             then run this again.
           </p>
@@ -117,7 +117,7 @@ export default function CleanupPage() {
                 Removing...
               </>
             ) : (
-              'Remove "Research" & "Qualified" columns'
+              'Remove "Researching" & "Qualified" columns'
             )}
           </button>
           {stagesMessage && <p className="mt-3 text-sm text-white/70">{stagesMessage}</p>}
