@@ -27,11 +27,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { repliesFound, stagesUpdated, errors } = await syncReplies();
+    const { repliesFound, stagesUpdated, bouncesFound, errors } = await syncReplies();
     return NextResponse.json({
       success: true,
       repliesFound,
       stagesUpdated,
+      bouncesFound,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

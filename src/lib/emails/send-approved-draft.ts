@@ -4,6 +4,7 @@ import { emailDrafts, messages, activities } from "@/db/schema";
 import { sendEmailViaGmail } from "@/lib/integrations/gmail-multi";
 import { recordEmailSent, type EmailAccountIndex } from "@/lib/data/email-accounts";
 import { advanceDealToContacted } from "@/lib/data/deals";
+import { generateTrackingToken, buildTrackingPixelUrl } from "@/lib/emails/tracking";
 import { eq } from "drizzle-orm";
 
 type ApprovedDraft = {
@@ -33,11 +34,14 @@ export async function sendApprovedDraft(
     throw new Error("Contact has no email address");
   }
 
-  const { messageId, fromAddress } = await sendEmailViaGmail({
+  const trackingToken = generateTrackingToken();
+
+  const { messageId, fromAddress, threadId } = await sendEmailViaGmail({
     to: draft.contact.email,
     subject: finalSubject,
     body: finalBody,
     accountIndex,
+    trackingPixelUrl: buildTrackingPixelUrl(trackingToken),
   });
 
   const [activity] = await db
@@ -60,6 +64,8 @@ export async function sendApprovedDraft(
       activityId: activity.id,
       provider: "gmail",
       providerMessageId: messageId,
+      threadId,
+      accountIndex,
       status: "sent",
       toAddress: draft.contact.email,
       fromAddress,
@@ -67,6 +73,7 @@ export async function sendApprovedDraft(
       body: finalBody,
       generatedByAi: !!draft.aiRunId,
       aiPromptVersion: draft.aiRunId || undefined,
+      trackingToken,
     })
     .returning();
 
