@@ -115,7 +115,7 @@ export async function updateCompany(id: string, input: Partial<CompanyInput>) {
 // and the review-queue actions.
 // ---------------------------------------------------------------------------
 
-function normalizeCompanyName(name: string): string {
+export function normalizeCompanyName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
@@ -154,6 +154,87 @@ export async function findDuplicateCompany(input: { name: string; website: strin
       return normalizeCompanyName(c.name) === normalizedTarget;
     }) ?? null
   );
+}
+
+export type DuplicateCompanyGroup = {
+  /** The company to keep — most deal/contact/activity history, then oldest. */
+  survivorId: string;
+  /** Everything else in the group, to be merged into survivorId and removed. */
+  duplicateIds: string[];
+};
+
+/**
+ * Finds every existing duplicate cluster in the companies table, using the
+ * exact same match rule findDuplicateCompany (above) applies one-at-a-time
+ * during lead discovery — normalized name, or website domain, matches. That
+ * check only runs for a *newly discovered* place, and manual entry
+ * (createCompanyWithInitialDeal) never runs it at all, so duplicates from
+ * before the check existed, or from manual entry, can still be sitting in
+ * the table. This is the batch version, for a one-time cleanup pass
+ * (scripts/dedupe-companies.ts) — clusters transitively (union-find) since
+ * that's the natural extension of a pairwise rule to grouping the whole
+ * table: if A matches B and B matches C, all three are one group even if A
+ * and C don't directly match.
+ */
+export async function findDuplicateCompanyGroups(): Promise<DuplicateCompanyGroup[]> {
+  const all = await db.query.companies.findMany({
+    with: { contacts: true, deals: true, activities: true },
+    orderBy: (c, { asc }) => asc(c.createdAt),
+  });
+
+  const parent = all.map((_, i) => i);
+  function find(i: number): number {
+    while (parent[i] !== i) i = parent[i];
+    return i;
+  }
+  function union(i: number, j: number) {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri !== rj) parent[ri] = rj;
+  }
+
+  const normalized = all.map((c) => normalizeCompanyName(c.name));
+  const domains = all.map((c) => websiteDomain(c.website));
+
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const sameDomain = domains[i] && domains[j] && domains[i] === domains[j];
+      const sameName = normalized[i] === normalized[j];
+      if (sameDomain || sameName) union(i, j);
+    }
+  }
+
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < all.length; i++) {
+    const root = find(i);
+    (groups.get(root) ?? groups.set(root, []).get(root)!).push(i);
+  }
+
+  const result: DuplicateCompanyGroup[] = [];
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+
+    // Survivor: most deals/contacts/activities (i.e. most worked), then
+    // oldest record (all is already sorted oldest-first, so the first
+    // index encountered per tier wins that tie).
+    let survivor = indices[0];
+    let bestScore = -1;
+    for (const i of indices) {
+      const c = all[i];
+      const score = (c.deals.length > 0 ? 1000 : 0) + c.contacts.length * 10 + c.activities.length;
+      if (score > bestScore) {
+        bestScore = score;
+        survivor = i;
+      }
+    }
+
+    result.push({
+      survivorId: all[survivor].id,
+      duplicateIds: indices.filter((i) => i !== survivor).map((i) => all[i].id),
+    });
+  }
+
+  return result;
 }
 
 export type DiscoveredCompanyInput = {
