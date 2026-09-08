@@ -6,14 +6,15 @@ import { syncReplies } from "@/lib/emails/sync-replies";
 // hit on a timer by a Zo background loop instead of a logged-in browser).
 export async function POST() {
   try {
-    const { repliesFound, stagesUpdated, errors } = await syncReplies();
+    const { repliesFound, stagesUpdated, bouncesFound, errors } = await syncReplies();
 
     return NextResponse.json({
       success: true,
       repliesFound,
       stagesUpdated,
+      bouncesFound,
       errors: errors.length > 0 ? errors : undefined,
-      message: `Synced ${repliesFound} replies, updated ${stagesUpdated} deal stages`,
+      message: `Synced ${repliesFound} replies, ${bouncesFound} bounces, updated ${stagesUpdated} deal stages`,
     });
   } catch (error) {
     console.error("Error syncing replies:", error);

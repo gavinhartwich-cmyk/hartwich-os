@@ -71,6 +71,7 @@ export const messageStatusEnum = pgEnum("message_status", [
   "draft",
   "sent",
   "delivered",
+  "opened",
   "replied",
   "bounced",
   "failed",
@@ -275,12 +276,30 @@ export const messages = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   threadId: text("thread_id"),
   status: messageStatusEnum("status").notNull().default("draft"),
+  // Which of the 3 rotating Gmail accounts (0/1/2, matching
+  // GMAIL_*_1/2/3 — see email_send_accounts above) this message went out
+  // from or came in on. Needed so a reply typed on the company page goes
+  // out from the same mailbox the thread already lives in, not whichever
+  // account happens to be next in the send rotation.
+  accountIndex: integer("account_index"),
   toAddress: text("to_address"),
   fromAddress: text("from_address"),
   subject: text("subject"),
   body: text("body"),
   generatedByAi: boolean("generated_by_ai").notNull().default(false),
   aiPromptVersion: text("ai_prompt_version"),
+  // --- Status tracking (email status section, company page) ---
+  // openedAt is set once, on first open, by the tracking-pixel endpoint
+  // (src/app/api/emails/track/[token]/route.ts). trackingToken is the
+  // opaque id embedded in that pixel's URL — null for messages sent
+  // before this existed, and for inbound messages (nothing to track).
+  trackingToken: text("tracking_token").unique(),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  // Set by the bounce-detection pass in src/lib/emails/sync-replies.ts
+  // when a mailer-daemon delivery-failure notice is matched back to this
+  // message by Gmail thread id.
+  bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+  bounceReason: text("bounce_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

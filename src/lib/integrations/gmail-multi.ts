@@ -55,38 +55,96 @@ function encodeHeaderValue(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Plain text -> minimal HTML: escape, then turn line breaks into <br>. */
+function textToHtml(body: string): string {
+  return escapeHtml(body).replace(/\n/g, "<br>\n");
+}
+
 /**
- * Send an email via Gmail API from a specific account
- * Returns the message ID if successful
+ * Send an email via Gmail API from a specific account.
+ * Returns the Gmail message id, the account's from-address, and the
+ * Gmail thread id the message landed in (a fresh id for a new thread, or
+ * the same one passed in via `threadId` for a reply).
+ *
+ * `trackingPixelUrl`, when given, sends the email as multipart/alternative
+ * (plain text + HTML) with a 1x1 image at that URL appended to the HTML
+ * part — how the "opened" status (src/app/api/emails/track/[token]) gets
+ * its signal. Without it, the email stays plain text as before.
+ *
+ * `threadId`/`inReplyToMessageId`/`references` thread a reply into an
+ * existing Gmail conversation: `threadId` tells Gmail's API which thread
+ * to file the sent message under, while In-Reply-To/References are the
+ * RFC 5322 headers other mail clients use to do the same.
  */
 export async function sendEmailViaGmail({
   to,
   subject,
   body,
   accountIndex = 0,
+  threadId,
+  inReplyToMessageId,
+  references,
+  trackingPixelUrl,
 }: {
   to: string;
   subject: string;
   body: string;
   accountIndex?: EmailAccountIndex;
-}): Promise<{ messageId: string; fromAddress: string }> {
+  threadId?: string;
+  inReplyToMessageId?: string;
+  references?: string;
+  trackingPixelUrl?: string;
+}): Promise<{ messageId: string; fromAddress: string; threadId: string }> {
   try {
     const gmail = getGmailClient(accountIndex);
     const fromAddress = getFromEmailForAccount(accountIndex);
+
+    const headers = [
+      `From: ${fromAddress}`,
+      `To: ${to}`,
+      `Subject: ${encodeHeaderValue(subject)}`,
+    ];
+    if (inReplyToMessageId) headers.push(`In-Reply-To: ${inReplyToMessageId}`);
+    if (references) headers.push(`References: ${references}`);
 
     // Build email in RFC 2822 format. Subject goes through RFC 2047
     // encoded-word encoding when it's not plain ASCII — headers are
     // ASCII-only per spec, and AI-drafted subjects routinely contain
     // smart quotes/em dashes that would otherwise land as raw UTF-8 bytes
     // in the header line and get the whole send rejected.
-    const email = [
-      `From: ${fromAddress}`,
-      `To: ${to}`,
-      `Subject: ${encodeHeaderValue(subject)}`,
-      "Content-Type: text/plain; charset=utf-8",
-      "",
-      body,
-    ].join("\n");
+    let email: string;
+    if (trackingPixelUrl) {
+      const boundary = `----hartwich-${Date.now().toString(36)}`;
+      const html =
+        `${textToHtml(body)}\n` +
+        `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:none">`;
+      email = [
+        ...headers,
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        body,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/html; charset=utf-8",
+        "",
+        html,
+        "",
+        `--${boundary}--`,
+      ].join("\n");
+    } else {
+      email = [...headers, "Content-Type: text/plain; charset=utf-8", "", body].join("\n");
+    }
 
     // Gmail's `raw` field requires base64url (RFC 4648 §5), not standard
     // base64 — a `+` or `/` from ordinary base64 makes the API reject the
@@ -98,6 +156,7 @@ export async function sendEmailViaGmail({
       userId: "me",
       requestBody: {
         raw: base64Email,
+        threadId,
       },
     });
 
@@ -108,6 +167,7 @@ export async function sendEmailViaGmail({
     return {
       messageId: response.data.id,
       fromAddress,
+      threadId: response.data.threadId || threadId || response.data.id,
     };
   } catch (error) {
     console.error(`Failed to send email via Gmail (account ${accountIndex}):`, error);
@@ -165,12 +225,14 @@ export async function getUnreadMessages(accountIndex: EmailAccountIndex) {
   return listGmailMessages(accountIndex, "is:unread", 50);
 }
 
+type GmailHeader = { name?: string | null; value?: string | null };
+
 /**
  * Extract email address from Gmail message
  */
-export function extractFromAddress(headers: any[]): string {
-  const fromHeader = headers?.find((h: any) => h.name === "From");
-  if (!fromHeader) return "";
+export function extractFromAddress(headers: GmailHeader[]): string {
+  const fromHeader = headers?.find((h) => h.name === "From");
+  if (!fromHeader?.value) return "";
   // Parse "Name <email@domain.com>" or just "email@domain.com"
   const match = fromHeader.value.match(/<([^>]+)>|^([^\s<]+)/);
   return match?.[1] || match?.[2] || "";
@@ -179,9 +241,19 @@ export function extractFromAddress(headers: any[]): string {
 /**
  * Extract In-Reply-To header (to match with our sent emails)
  */
-export function extractInReplyToMessageId(headers: any[]): string | null {
-  const replyHeader = headers?.find((h: any) => h.name === "In-Reply-To");
+export function extractInReplyToMessageId(headers: GmailHeader[]): string | null {
+  const replyHeader = headers?.find((h) => h.name === "In-Reply-To");
   return replyHeader?.value || null;
+}
+
+/**
+ * Extract the RFC 5322 Message-ID header (e.g. "<abc123@mail.gmail.com>")
+ * — used to build In-Reply-To/References when sending a reply so non-Gmail
+ * clients thread it correctly too. Distinct from Gmail's own message id.
+ */
+export function extractMessageIdHeader(headers: GmailHeader[]): string | null {
+  const header = headers?.find((h) => h.name === "Message-ID" || h.name === "Message-Id");
+  return header?.value || null;
 }
 
 /**
