@@ -61,6 +61,30 @@ export async function pickAvailableAccount(): Promise<EmailAccountIndex | null> 
   return null;
 }
 
+/**
+ * Resolves which mailbox a draft should send from. A reply (kind='reply')
+ * must go out from whichever mailbox received the message it's answering —
+ * not the warm-up round robin — since responding to an already-engaged
+ * prospect isn't cold volume and there's exactly one right account (the one
+ * that owns the Gmail thread). Falls back to the normal rotation for every
+ * other kind, and even for a reply whose original message somehow has no
+ * recorded accountIndex (pre-v1.1 data).
+ */
+export async function resolveAccountForDraft(draft: {
+  kind: string;
+  inReplyToMessageId: string | null;
+}): Promise<EmailAccountIndex | null> {
+  if (draft.kind === "reply" && draft.inReplyToMessageId) {
+    const original = await db.query.messages.findFirst({
+      where: (m, { eq }) => eq(m.id, draft.inReplyToMessageId!),
+    });
+    if (original?.accountIndex != null) {
+      return original.accountIndex as EmailAccountIndex;
+    }
+  }
+  return pickAvailableAccount();
+}
+
 /** Whether `accountIndex` specifically has capacity right now (used to report exact reasons, not just pick a winner). */
 export async function checkAccountCapacity(
   accountIndex: EmailAccountIndex

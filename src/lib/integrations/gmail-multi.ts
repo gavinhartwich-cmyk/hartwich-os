@@ -1,5 +1,7 @@
 import "server-only";
+import crypto from "node:crypto";
 import { google } from "googleapis";
+import { getAppUrl } from "@/lib/utils/app-url";
 
 /**
  * Multi-account Gmail integration for sending outreach emails from 3 accounts.
@@ -55,96 +57,103 @@ function encodeHeaderValue(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
 
-function escapeHtml(value: string): string {
-  return value
+/**
+ * Turns a plain-text draft body into minimal HTML for the multipart
+ * alternative part: blank-line-separated paragraphs become <p>, single
+ * newlines within a paragraph become <br>. Escapes HTML special characters
+ * first so nothing in an AI-drafted body (an "&" or a stray "<") breaks the
+ * markup or gets interpreted as a tag.
+ */
+function plainTextToHtml(text: string): string {
+  const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/** Plain text -> minimal HTML: escape, then turn line breaks into <br>. */
-function textToHtml(body: string): string {
-  return escapeHtml(body).replace(/\n/g, "<br>\n");
+    .replace(/>/g, "&gt;");
+  const paragraphs = escaped.split(/\n{2,}/).map((p) => p.replace(/\n/g, "<br>"));
+  return paragraphs.map((p) => `<p style="margin:0 0 1em 0;">${p}</p>`).join("\n");
 }
 
 /**
  * Send an email via Gmail API from a specific account.
- * Returns the Gmail message id, the account's from-address, and the
- * Gmail thread id the message landed in (a fresh id for a new thread, or
- * the same one passed in via `threadId` for a reply).
  *
- * `trackingPixelUrl`, when given, sends the email as multipart/alternative
- * (plain text + HTML) with a 1x1 image at that URL appended to the HTML
- * part — how the "opened" status (src/app/api/emails/track/[token]) gets
- * its signal. Without it, the email stays plain text as before.
+ * Always sends multipart/alternative (a plain-text part plus an HTML part)
+ * rather than plain text-only, for two reasons introduced in v1.1:
+ * - `trackingToken`, when given, gets a 1x1 pixel (src/app/api/pixel/[token])
+ *   appended to the HTML part — this is what powers open tracking. It can
+ *   only live in the HTML part; a plain-text email has nowhere to hide it.
+ * - `inReplyTo`/`references`/`threadId`, when given, thread this send into
+ *   an existing Gmail conversation instead of starting a new one — used for
+ *   AI-drafted replies to an inbound message (see send-approved-draft.ts).
  *
- * `threadId`/`inReplyToMessageId`/`references` thread a reply into an
- * existing Gmail conversation: `threadId` tells Gmail's API which thread
- * to file the sent message under, while In-Reply-To/References are the
- * RFC 5322 headers other mail clients use to do the same.
+ * Returns the real RFC822 Message-ID header (distinct from Gmail's internal
+ * message id) and threadId alongside the existing messageId/fromAddress —
+ * both needed to correctly thread a *later* reply to this message.
  */
 export async function sendEmailViaGmail({
   to,
   subject,
   body,
   accountIndex = 0,
-  threadId,
-  inReplyToMessageId,
+  trackingToken,
+  inReplyTo,
   references,
-  trackingPixelUrl,
+  threadId,
 }: {
   to: string;
   subject: string;
   body: string;
   accountIndex?: EmailAccountIndex;
-  threadId?: string;
-  inReplyToMessageId?: string;
-  references?: string;
-  trackingPixelUrl?: string;
-}): Promise<{ messageId: string; fromAddress: string; threadId: string }> {
+  /** Pixel token for open tracking — omit for a message that shouldn't carry one. */
+  trackingToken?: string | null;
+  /** RFC822 Message-ID of the message this is replying to, for correct in-client threading. */
+  inReplyTo?: string | null;
+  /** Same value as inReplyTo in the simple one-hop case — kept as a separate param for a future multi-hop thread. */
+  references?: string | null;
+  /** Gmail threadId to attach this send to, so it lands in the same conversation. */
+  threadId?: string | null;
+}): Promise<{ messageId: string; fromAddress: string; threadId: string | null; rfc822MessageId: string | null }> {
   try {
     const gmail = getGmailClient(accountIndex);
     const fromAddress = getFromEmailForAccount(accountIndex);
+
+    const boundary = `----=_HartwichOS_${crypto.randomBytes(12).toString("hex")}`;
+
+    const base = getAppUrl();
+    const pixelUrl = trackingToken && base ? `${base}/api/pixel/${trackingToken}` : null;
+    const htmlBody =
+      plainTextToHtml(body) +
+      (pixelUrl
+        ? `\n<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none;border:0;" />`
+        : "");
 
     const headers = [
       `From: ${fromAddress}`,
       `To: ${to}`,
       `Subject: ${encodeHeaderValue(subject)}`,
-    ];
-    if (inReplyToMessageId) headers.push(`In-Reply-To: ${inReplyToMessageId}`);
-    if (references) headers.push(`References: ${references}`);
+      inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
+      references ? `References: ${references}` : null,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ].filter((line): line is string => line !== null);
 
-    // Build email in RFC 2822 format. Subject goes through RFC 2047
-    // encoded-word encoding when it's not plain ASCII — headers are
-    // ASCII-only per spec, and AI-drafted subjects routinely contain
-    // smart quotes/em dashes that would otherwise land as raw UTF-8 bytes
-    // in the header line and get the whole send rejected.
-    let email: string;
-    if (trackingPixelUrl) {
-      const boundary = `----hartwich-${Date.now().toString(36)}`;
-      const html =
-        `${textToHtml(body)}\n` +
-        `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:none">`;
-      email = [
-        ...headers,
-        `Content-Type: multipart/alternative; boundary="${boundary}"`,
-        "",
-        `--${boundary}`,
-        "Content-Type: text/plain; charset=utf-8",
-        "",
-        body,
-        "",
-        `--${boundary}`,
-        "Content-Type: text/html; charset=utf-8",
-        "",
-        html,
-        "",
-        `--${boundary}--`,
-      ].join("\n");
-    } else {
-      email = [...headers, "Content-Type: text/plain; charset=utf-8", "", body].join("\n");
-    }
+    // Build email as RFC 2822 multipart/alternative: a plain-text part (kept
+    // byte-identical to the reviewed draft — never touched by the pixel or
+    // HTML wrapping) plus the HTML part carrying the tracking pixel.
+    const email = [
+      ...headers,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      body,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      htmlBody,
+      "",
+      `--${boundary}--`,
+    ].join("\n");
 
     // Gmail's `raw` field requires base64url (RFC 4648 §5), not standard
     // base64 — a `+` or `/` from ordinary base64 makes the API reject the
@@ -156,7 +165,7 @@ export async function sendEmailViaGmail({
       userId: "me",
       requestBody: {
         raw: base64Email,
-        threadId,
+        threadId: threadId ?? undefined,
       },
     });
 
@@ -164,10 +173,30 @@ export async function sendEmailViaGmail({
       throw new Error("Gmail API did not return a message ID");
     }
 
+    // The RFC822 Message-ID header (needed to thread a future reply) isn't
+    // in the send response — it's only visible on a follow-up read. A
+    // metadata-only fetch keeps this cheap (no body download).
+    let rfc822MessageId: string | null = null;
+    try {
+      const sent = await gmail.users.messages.get({
+        userId: "me",
+        id: response.data.id,
+        format: "metadata",
+        metadataHeaders: ["Message-Id"],
+      });
+      rfc822MessageId =
+        sent.data.payload?.headers?.find((h) => h.name === "Message-Id")?.value ?? null;
+    } catch (err) {
+      // Non-fatal — the send already succeeded. Just means a later reply to
+      // this message won't get perfect In-Reply-To/References headers.
+      console.error("Failed to fetch sent message's Message-Id header:", err);
+    }
+
     return {
       messageId: response.data.id,
       fromAddress,
-      threadId: response.data.threadId || threadId || response.data.id,
+      threadId: response.data.threadId ?? null,
+      rfc822MessageId,
     };
   } catch (error) {
     console.error(`Failed to send email via Gmail (account ${accountIndex}):`, error);
@@ -225,35 +254,15 @@ export async function getUnreadMessages(accountIndex: EmailAccountIndex) {
   return listGmailMessages(accountIndex, "is:unread", 50);
 }
 
-type GmailHeader = { name?: string | null; value?: string | null };
-
 /**
  * Extract email address from Gmail message
  */
-export function extractFromAddress(headers: GmailHeader[]): string {
-  const fromHeader = headers?.find((h) => h.name === "From");
-  if (!fromHeader?.value) return "";
+export function extractFromAddress(headers: any[]): string {
+  const fromHeader = headers?.find((h: any) => h.name === "From");
+  if (!fromHeader) return "";
   // Parse "Name <email@domain.com>" or just "email@domain.com"
   const match = fromHeader.value.match(/<([^>]+)>|^([^\s<]+)/);
   return match?.[1] || match?.[2] || "";
-}
-
-/**
- * Extract In-Reply-To header (to match with our sent emails)
- */
-export function extractInReplyToMessageId(headers: GmailHeader[]): string | null {
-  const replyHeader = headers?.find((h) => h.name === "In-Reply-To");
-  return replyHeader?.value || null;
-}
-
-/**
- * Extract the RFC 5322 Message-ID header (e.g. "<abc123@mail.gmail.com>")
- * — used to build In-Reply-To/References when sending a reply so non-Gmail
- * clients thread it correctly too. Distinct from Gmail's own message id.
- */
-export function extractMessageIdHeader(headers: GmailHeader[]): string | null {
-  const header = headers?.find((h) => h.name === "Message-ID" || h.name === "Message-Id");
-  return header?.value || null;
 }
 
 /**
@@ -261,4 +270,53 @@ export function extractMessageIdHeader(headers: GmailHeader[]): string | null {
  */
 export function extractThreadId(message: any): string | null {
   return message?.threadId || null;
+}
+
+/** Case-insensitive header lookup — Gmail is inconsistent about "Message-Id" vs "Message-ID" casing. */
+export function extractHeader(headers: any[], name: string): string | null {
+  const header = headers?.find((h: any) => h.name?.toLowerCase() === name.toLowerCase());
+  return header?.value ?? null;
+}
+
+type GmailMessagePart = {
+  mimeType?: string | null;
+  body?: { data?: string | null } | null;
+  parts?: GmailMessagePart[] | null;
+};
+
+function collectPartsByType(part: GmailMessagePart | null | undefined, mimeType: string, acc: string[]): void {
+  if (!part) return;
+  if (part.mimeType === mimeType && part.body?.data) {
+    acc.push(Buffer.from(part.body.data, "base64url").toString("utf-8"));
+  }
+  for (const child of part.parts ?? []) collectPartsByType(child, mimeType, acc);
+}
+
+/**
+ * Best-effort plain-text body for a reply notification (sync-replies.ts) —
+ * walks every part of a possibly-nested multipart message (the old code only
+ * ever looked at `payload.parts[0]`, which missed anything but the simplest
+ * message shape) rather than assuming a flat single-part layout. Falls back
+ * to the HTML part, tags stripped, when there's no text/plain part at all.
+ */
+export function extractPlainTextBody(message: { payload?: GmailMessagePart | null }): string | null {
+  const plain: string[] = [];
+  collectPartsByType(message.payload ?? null, "text/plain", plain);
+  if (plain.length > 0) return plain.join("\n\n").trim();
+
+  const html: string[] = [];
+  collectPartsByType(message.payload ?? null, "text/html", html);
+  if (html.length > 0) {
+    return html.join("\n\n").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return null;
+}
+
+/** Every text/plain + text/html part concatenated, tags stripped — used only to scan a bounce-notification body for the failed recipient address. */
+export function extractAllMessageText(message: { payload?: GmailMessagePart | null }): string {
+  const plain: string[] = [];
+  collectPartsByType(message.payload ?? null, "text/plain", plain);
+  const html: string[] = [];
+  collectPartsByType(message.payload ?? null, "text/html", html);
+  return [...plain, ...html.map((h) => h.replace(/<[^>]+>/g, " "))].join("\n");
 }

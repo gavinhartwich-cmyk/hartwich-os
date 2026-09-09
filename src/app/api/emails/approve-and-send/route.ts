@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { emailDrafts } from "@/db/schema";
-import { pickAvailableAccount } from "@/lib/data/email-accounts";
+import { resolveAccountForDraft } from "@/lib/data/email-accounts";
 import { sendApprovedDraft } from "@/lib/emails/send-approved-draft";
 import { findRecentOutreach, DUPLICATE_OUTREACH_WINDOW_DAYS } from "@/lib/data/email-drafts";
 import { eq } from "drizzle-orm";
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       })
       .where(eq(emailDrafts.id, emailDraftId));
 
-    const accountIndex = await pickAvailableAccount();
+    const accountIndex = await resolveAccountForDraft(draft);
 
     if (accountIndex === null) {
       return NextResponse.json({

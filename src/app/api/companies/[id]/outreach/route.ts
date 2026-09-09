@@ -5,7 +5,6 @@ import { companies, contacts, emailDrafts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { draftOutreachEmail } from "@/lib/ai/draft-outreach";
 import { findRecentOutreach, DUPLICATE_OUTREACH_WINDOW_DAYS } from "@/lib/data/email-drafts";
-import { listDealsForCompany } from "@/lib/data/deals";
 
 const DraftFromCompanySchema = z.object({
   contactId: z.string().uuid(),
@@ -32,6 +31,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!company) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
+
+    // The company's open deal — needed so the v1.1 send automation
+    // (auto-move to Contacted, follow-up cadence, etc. — see
+    // send-approved-draft.ts) has something to act on. Prefers a deal
+    // that's still open (not Won/Lost), falling back to the most recent
+    // deal overall if every one happens to be closed already.
+    const companyDeals = await db.query.deals.findMany({
+      where: (d, { eq }) => eq(d.companyId, companyId),
+      with: { stage: true },
+      orderBy: (d, { desc }) => desc(d.createdAt),
+    });
+    const activeDeal = companyDeals.find((d) => !d.stage.isWon && !d.stage.isLost) ?? companyDeals[0] ?? null;
 
     const contact = await db.query.contacts.findFirst({
       where: eq(contacts.id, contactId),
@@ -70,24 +81,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       yourCompany: "Hartwich Labs",
     });
 
-    // Most recent deal for this company — the one on the board right now.
-    // Without this, emailDrafts.dealId stays null forever and
-    // advanceDealToContacted (send-approved-draft.ts) never has a deal to
-    // move: the card just sits in whatever column it started in no matter
-    // how many emails go out. A company with no deal yet (still in the
-    // review queue) has nothing to attach to, which is fine — there's no
-    // board card to move either.
-    const [mostRecentDeal] = await listDealsForCompany(companyId);
-
     const [emailDraft] = await db
       .insert(emailDrafts)
       .values({
         companyId,
         contactId,
-        dealId: mostRecentDeal?.id,
+        dealId: activeDeal?.id ?? null,
         subject: draft.subject,
         body: draft.body,
         status: "pending_review",
+        kind: "cold_outreach",
         aiRunId: draft.aiRunId,
       })
       .returning();

@@ -171,10 +171,12 @@ export type DuplicateCompanyGroup = {
  * (createCompanyWithInitialDeal) never runs it at all, so duplicates from
  * before the check existed, or from manual entry, can still be sitting in
  * the table. This is the batch version, for a one-time cleanup pass
- * (scripts/dedupe-companies.ts) — clusters transitively (union-find) since
- * that's the natural extension of a pairwise rule to grouping the whole
- * table: if A matches B and B matches C, all three are one group even if A
- * and C don't directly match.
+ * (see scripts/fix-old-leads.ts, which currently inlines its own copy of
+ * this same union-find rather than importing this — worth consolidating
+ * later) — clusters transitively (union-find) since that's the natural
+ * extension of a pairwise rule to grouping the whole table: if A matches B
+ * and B matches C, all three are one group even if A and C don't directly
+ * match.
  */
 export async function findDuplicateCompanyGroups(): Promise<DuplicateCompanyGroup[]> {
   const all = await db.query.companies.findMany({

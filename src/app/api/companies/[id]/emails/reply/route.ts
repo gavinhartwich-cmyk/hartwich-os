@@ -1,16 +1,12 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, contacts, messages, activities } from "@/db/schema";
-import {
-  sendEmailViaGmail,
-  getGmailMessage,
-  extractMessageIdHeader,
-} from "@/lib/integrations/gmail-multi";
+import { sendEmailViaGmail, getGmailMessage, extractHeader } from "@/lib/integrations/gmail-multi";
 import { getReplyTargetForContact } from "@/lib/data/email-threads";
 import { listDealsForCompany } from "@/lib/data/deals";
-import { generateTrackingToken, buildTrackingPixelUrl } from "@/lib/emails/tracking";
 
 const ReplySchema = z.object({
   contactId: z.string().uuid(),
@@ -58,10 +54,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // replying to, so In-Reply-To/References thread correctly for mail
     // clients other than Gmail — Gmail's own threading is handled by
     // passing `threadId` straight to the send call below regardless.
-    let inReplyToMessageId: string | null = null;
+    let inReplyToHeader: string | null = null;
     try {
       const original = await getGmailMessage(replyTarget.accountIndex, replyTarget.providerMessageId);
-      inReplyToMessageId = extractMessageIdHeader(original.payload?.headers || []);
+      inReplyToHeader = extractHeader(original.payload?.headers || [], "Message-Id");
     } catch (err) {
       console.error("Could not fetch original message for threading headers:", err);
     }
@@ -72,17 +68,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         : `Re: ${replyTarget.subject}`
       : "Re: your email";
 
-    const trackingToken = generateTrackingToken();
+    const trackingToken = crypto.randomUUID();
 
-    const { messageId, fromAddress, threadId } = await sendEmailViaGmail({
+    const { messageId, fromAddress, threadId, rfc822MessageId } = await sendEmailViaGmail({
       to: contact.email,
       subject,
       body: replyBody,
       accountIndex: replyTarget.accountIndex,
       threadId: replyTarget.threadId,
-      inReplyToMessageId: inReplyToMessageId || undefined,
-      references: inReplyToMessageId || undefined,
-      trackingPixelUrl: buildTrackingPixelUrl(trackingToken),
+      inReplyTo: inReplyToHeader || undefined,
+      references: inReplyToHeader || undefined,
+      trackingToken,
     });
 
     // Most recent deal for this company, same "attach to whatever's on
@@ -109,13 +105,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       providerMessageId: messageId,
       threadId,
       accountIndex: replyTarget.accountIndex,
-      status: "sent",
+      status: "delivered",
       toAddress: contact.email,
       fromAddress,
       subject,
       body: replyBody,
       generatedByAi: false,
       trackingToken,
+      rfc822MessageId,
+      deliveredAt: new Date(),
     });
 
     return NextResponse.json({

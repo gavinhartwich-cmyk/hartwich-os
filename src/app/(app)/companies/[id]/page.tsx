@@ -2,8 +2,7 @@ import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/data/companies";
 import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
-import { findRecentOutreachForContacts } from "@/lib/data/email-drafts";
-import { listEmailThreadsForCompany } from "@/lib/data/email-threads";
+import { findRecentOutreachForContacts, listEmailHistoryForCompany } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import { isApolloConfigured } from "@/lib/integrations/apollo";
 import { isTavilyConfigured } from "@/lib/integrations/tavily";
@@ -14,7 +13,7 @@ import Link from "next/link";
 import ContactsPanel from "./contacts-panel";
 import ActivityPanel from "./activity-panel";
 import OutreachPanel from "./outreach-panel";
-import EmailStatusPanel from "./email-status-panel";
+import EmailHistoryPanel from "./email-history-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
 const OWNER_LOOKUP_MESSAGES: Record<string, { tone: "ok" | "muted"; text: string }> = {
@@ -37,12 +36,12 @@ export default async function CompanyDetailPage({
 }) {
   const { id } = await params;
   const { ownerLookup } = await searchParams;
-  const [company, contacts, activities, currentUser, emailThreads] = await Promise.all([
+  const [company, contacts, activities, currentUser, emailHistory] = await Promise.all([
     getCompanyById(id),
     listContactsForCompany(id),
     listActivitiesForCompany(id),
     getCurrentAppUser(),
-    listEmailThreadsForCompany(id),
+    listEmailHistoryForCompany(id),
   ]);
   if (!company) notFound();
 
@@ -148,6 +147,8 @@ export default async function CompanyDetailPage({
         />
       </div>
 
+      <EmailHistoryPanel history={emailHistory} />
+
       {currentUser && (
         <OutreachPanel
           companyId={company.id}
@@ -162,14 +163,6 @@ export default async function CompanyDetailPage({
             websiteSummary: company.websiteSummary,
             servicesOffered: company.servicesOffered,
           }}
-        />
-      )}
-
-      {currentUser && (
-        <EmailStatusPanel
-          companyId={company.id}
-          currentUserId={currentUser.id}
-          threads={emailThreads}
         />
       )}
     </div>

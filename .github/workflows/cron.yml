@@ -41,3 +41,12 @@ jobs:
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-queued-emails" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
+
+  email-cadence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run follow-up cadence (v1.1 — 3/6/9-day no-reply nudges)
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/email-cadence" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"

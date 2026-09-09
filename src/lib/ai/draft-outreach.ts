@@ -132,47 +132,18 @@ Hard rules:
 
 Keep it professional but conversational, 120-160 words.`;
 
-export async function draftOutreachEmail({
-  company,
-  contact,
-  angle,
-  yourName,
-  yourCompany,
-}: {
-  company: OutreachCompanyContext;
-  contact?: OutreachContactContext | null;
-  /** Optional extra direction from Gavin — a specific angle to emphasize, not required. */
-  angle?: string | null;
-  yourName: string;
-  yourCompany: string;
-}): Promise<EmailDraft & { aiRunId: string }> {
-  const researchContext = buildResearchContext(company);
-
-  // "Hiring Manager" used to be the fallback here when no named contact was
-  // known — wrong register entirely (that's recruiting boilerplate, not
-  // sales), and the model dutifully greeted a prospect with "Hi Hiring
-  // Manager," in a real sent email. Telling it plainly that no name is
-  // known lets the system prompt's own greeting rule (generic "Hi there,")
-  // take over instead.
-  const contactLine = contact?.name
-    ? `Contact: ${contact.name}${contact.title ? `, ${contact.title}` : ""}`
-    : "Contact: no named contact known — greet generically, do not invent a name.";
-
-  const userPrompt = `Target company: ${company.name}${company.website ? ` (${company.website})` : ""}
-${contactLine}
-Your name: ${yourName}
-Your company: ${yourCompany}
-
-What we know about this business from research:
-${researchContext}
-${angle ? `\nSpecific angle to emphasize: ${angle}` : ""}`;
-
+/**
+ * Shared Groq-call-plus-audit-log plumbing for every email-drafting entry
+ * point below (cold outreach, follow-up, reply) — same schema, same
+ * success/failure logging to ai_runs, just a different system/user prompt.
+ */
+async function runEmailDraftCompletion(system: string, userPrompt: string): Promise<EmailDraft & { aiRunId: string }> {
   try {
     const result = await structuredCompletion({
       schemaName: "email_draft",
       jsonSchema: EMAIL_DRAFT_JSON_SCHEMA,
       zodSchema: EmailDraftSchema,
-      system: SYSTEM_PROMPT,
+      system,
       user: userPrompt,
       // A full email body runs longer than the compact JSON structuredCompletion's
       // other call sites produce — the default 1024 budget leaves too little
@@ -211,4 +182,140 @@ ${angle ? `\nSpecific angle to emphasize: ${angle}` : ""}`;
 
     throw error;
   }
+}
+
+// "Hiring Manager" used to be the fallback here when no named contact was
+// known — wrong register entirely (that's recruiting boilerplate, not
+// sales), and the model dutifully greeted a prospect with "Hi Hiring
+// Manager," in a real sent email. Telling it plainly that no name is known
+// lets the caller's own greeting rule (generic "Hi there,") take over instead.
+function contactLine(contact?: OutreachContactContext | null): string {
+  return contact?.name
+    ? `Contact: ${contact.name}${contact.title ? `, ${contact.title}` : ""}`
+    : "Contact: no named contact known — greet generically, do not invent a name.";
+}
+
+export async function draftOutreachEmail({
+  company,
+  contact,
+  angle,
+  yourName,
+  yourCompany,
+}: {
+  company: OutreachCompanyContext;
+  contact?: OutreachContactContext | null;
+  /** Optional extra direction from Gavin — a specific angle to emphasize, not required. */
+  angle?: string | null;
+  yourName: string;
+  yourCompany: string;
+}): Promise<EmailDraft & { aiRunId: string }> {
+  const researchContext = buildResearchContext(company);
+
+  const userPrompt = `Target company: ${company.name}${company.website ? ` (${company.website})` : ""}
+${contactLine(contact)}
+Your name: ${yourName}
+Your company: ${yourCompany}
+
+What we know about this business from research:
+${researchContext}
+${angle ? `\nSpecific angle to emphasize: ${angle}` : ""}`;
+
+  return runEmailDraftCompletion(SYSTEM_PROMPT, userPrompt);
+}
+
+// v1.1: the automated 3/6/9-day nudge (src/lib/emails/cadence.ts) sent when
+// a prospect hasn't replied yet. Deliberately short and light — a real
+// second/third email doesn't re-pitch from scratch, it just bumps the
+// thread. followUpNumber (1-3) softens the ask further by the last one.
+const FOLLOW_UP_SYSTEM_PROMPT = `You are Gavin, writing a brief follow-up to a cold email you sent a few days ago that got no reply yet. This is Hartwich Labs, which helps HVAC businesses fix their online reputation and win more reviews.
+
+Rules:
+- This is follow-up #1, #2, or #3 in a short sequence — you'll be told which. Keep every one SHORT (40-80 words) — a bump, not a re-pitch. Don't repeat the original email's full pitch.
+- Reference that this is a follow-up naturally (e.g. "wanted to bump this up" / "following up on my note last week") without sounding apologetic or pushy.
+- On follow-up #3, it's fine to softly close the loop (e.g. "totally understand if the timing's not right — happy to leave it here unless you want to revisit").
+- Do not invent facts, numbers, or claims not already given to you.
+- Subject: reuse the original subject prefixed with "Re: " unless a short, natural variant reads better — never a generic "Following up" subject line.
+- Keep punctuation plain — no em-dash crutch.
+
+Keep it professional but conversational.`;
+
+export async function draftFollowUpEmail({
+  company,
+  contact,
+  originalSubject,
+  originalBody,
+  followUpNumber,
+  wasOpened,
+  yourName,
+  yourCompany,
+}: {
+  company: OutreachCompanyContext;
+  contact?: OutreachContactContext | null;
+  originalSubject: string;
+  originalBody: string;
+  followUpNumber: 1 | 2 | 3;
+  wasOpened: boolean;
+  yourName: string;
+  yourCompany: string;
+}): Promise<EmailDraft & { aiRunId: string }> {
+  const userPrompt = `Target company: ${company.name}${company.website ? ` (${company.website})` : ""}
+${contactLine(contact)}
+Your name: ${yourName}
+Your company: ${yourCompany}
+This is follow-up #${followUpNumber} of 3. ${wasOpened ? "They opened the original email but haven't replied." : "No sign they've opened the original email yet."}
+
+The original email sent:
+Subject: ${originalSubject}
+${originalBody}
+
+What we know about this business from research:
+${buildResearchContext(company)}`;
+
+  return runEmailDraftCompletion(FOLLOW_UP_SYSTEM_PROMPT, userPrompt);
+}
+
+// v1.1: an inbound reply arrived (src/lib/emails/sync-replies.ts) — draft a
+// response that actually engages with what they said, not a templated
+// continuation of the cold pitch.
+const REPLY_SYSTEM_PROMPT = `You are Gavin, replying to a prospect at an HVAC business who just responded to your cold email about Hartwich Labs' review-management service. Read what they actually wrote and respond to it directly — answer any question, address any objection or condition they raised, and move the conversation toward a concrete next step (usually a quick call), without ignoring what they said in favor of a generic pitch continuation.
+
+Rules:
+- If they asked a question you don't have the research to answer accurately, say you'll follow up on specifics rather than guessing.
+- If they said no or aren't interested, a short, gracious, non-pushy close is correct — don't keep selling.
+- Do not invent facts, numbers, or claims not already given to you.
+- Subject: reuse "Re: " + the original subject.
+- Match their tone — brief if they were brief, more detailed if they wrote more.
+- Keep punctuation plain — no em-dash crutch.`;
+
+export async function draftReplyEmail({
+  company,
+  contact,
+  originalSubject,
+  replyText,
+  yourName,
+  yourCompany,
+}: {
+  company: OutreachCompanyContext;
+  contact?: OutreachContactContext | null;
+  originalSubject: string;
+  /** The prospect's own reply text, as received. */
+  replyText: string;
+  yourName: string;
+  yourCompany: string;
+}): Promise<EmailDraft & { aiRunId: string }> {
+  const userPrompt = `Target company: ${company.name}${company.website ? ` (${company.website})` : ""}
+${contactLine(contact)}
+Your name: ${yourName}
+Your company: ${yourCompany}
+Original subject: ${originalSubject}
+
+What they replied with:
+"""
+${replyText}
+"""
+
+What we know about this business from research:
+${buildResearchContext(company)}`;
+
+  return runEmailDraftCompletion(REPLY_SYSTEM_PROMPT, userPrompt);
 }

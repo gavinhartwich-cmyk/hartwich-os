@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { pickAvailableAccount } from "@/lib/data/email-accounts";
+import { resolveAccountForDraft } from "@/lib/data/email-accounts";
 import { sendApprovedDraft } from "@/lib/emails/send-approved-draft";
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     for (const draft of queued) {
-      const accountIndex = await pickAvailableAccount();
+      const accountIndex = await resolveAccountForDraft(draft);
       if (accountIndex === null) break; // every account capped right now — stop; next run picks up here
 
       if (!draft.approvedBy) {

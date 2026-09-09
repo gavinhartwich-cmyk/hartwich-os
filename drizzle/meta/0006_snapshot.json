@@ -1,6 +1,6 @@
 {
-  "id": "6bd347c7-519c-4e95-a18c-e4b8b1c2209b",
-  "prevId": "d9e85e51-ff65-4de0-96a5-4065a8629326",
+  "id": "98b72239-29ae-4360-b16c-6c70fbb765d8",
+  "prevId": "6bd347c7-519c-4e95-a18c-e4b8b1c2209b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1525,6 +1525,12 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "account_index": {
+          "name": "account_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "to_address": {
           "name": "to_address",
           "type": "text",
@@ -1571,12 +1577,6 @@
         "rfc822_message_id": {
           "name": "rfc822_message_id",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "account_index": {
-          "name": "account_index",
-          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -2247,6 +2247,7 @@
         "draft",
         "sent",
         "delivered",
+        "opened",
         "replied",
         "bounced",
         "failed"
