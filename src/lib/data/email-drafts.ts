@@ -96,6 +96,58 @@ export async function findRecentOutreachForContacts(
   return byContact;
 }
 
+export type EmailHistoryStatus = "bounced" | "replied" | "opened" | "delivered" | "sent";
+
+export interface EmailHistoryEntry {
+  id: string;
+  subject: string | null;
+  toAddress: string | null;
+  sentAt: Date;
+  status: EmailHistoryStatus;
+  openCount: number;
+  bounceReason: string | null;
+}
+
+/**
+ * Full outbound-email history for a company's page (v1.1) — every email
+ * ever sent, not just the DUPLICATE_OUTREACH_WINDOW_DAYS-limited recent
+ * ones findRecentOutreach(ForContacts) returns. Status is derived, not read
+ * straight off `messages.status`, because "opened" isn't its own enum value
+ * — openedAt is a separate signal layered on top of delivered/bounced/replied.
+ */
+export async function listEmailHistoryForCompany(companyId: string): Promise<EmailHistoryEntry[]> {
+  const sent = await db.query.activities.findMany({
+    where: (a, { eq, and }) => and(eq(a.companyId, companyId), eq(a.type, "email"), eq(a.direction, "outbound")),
+    with: { message: true },
+    orderBy: (a, { desc }) => desc(a.occurredAt),
+  });
+
+  return sent
+    .filter((a): a is typeof a & { message: NonNullable<typeof a.message> } => a.message != null)
+    .map((a) => {
+      const m = a.message;
+      const status: EmailHistoryStatus =
+        m.status === "bounced"
+          ? "bounced"
+          : m.status === "replied"
+            ? "replied"
+            : m.openedAt
+              ? "opened"
+              : m.status === "delivered"
+                ? "delivered"
+                : "sent";
+      return {
+        id: m.id,
+        subject: m.subject,
+        toAddress: m.toAddress,
+        sentAt: a.occurredAt,
+        status,
+        openCount: m.openCount,
+        bounceReason: m.bounceReason,
+      };
+    });
+}
+
 export async function listPendingEmailDrafts(): Promise<PendingEmailDraft[]> {
   const drafts = await db.query.emailDrafts.findMany({
     where: (ed, { eq }) => eq(ed.status, "pending_review"),

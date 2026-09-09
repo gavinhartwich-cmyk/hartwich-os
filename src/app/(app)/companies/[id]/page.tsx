@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/data/companies";
 import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
-import { findRecentOutreachForContacts } from "@/lib/data/email-drafts";
+import { findRecentOutreachForContacts, listEmailHistoryForCompany } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
@@ -11,6 +11,7 @@ import Link from "next/link";
 import ContactsPanel from "./contacts-panel";
 import ActivityPanel from "./activity-panel";
 import OutreachPanel from "./outreach-panel";
+import EmailHistoryPanel from "./email-history-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
 export default async function CompanyDetailPage({
@@ -19,11 +20,12 @@ export default async function CompanyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [company, contacts, activities, currentUser] = await Promise.all([
+  const [company, contacts, activities, currentUser, emailHistory] = await Promise.all([
     getCompanyById(id),
     listContactsForCompany(id),
     listActivitiesForCompany(id),
     getCurrentAppUser(),
+    listEmailHistoryForCompany(id),
   ]);
   if (!company) notFound();
 
@@ -117,6 +119,8 @@ export default async function CompanyDetailPage({
         <ActivityPanel companyId={company.id} activities={activities} contacts={contacts} />
         <ContactsPanel companyId={company.id} contacts={contacts} />
       </div>
+
+      <EmailHistoryPanel history={emailHistory} />
 
       {currentUser && (
         <OutreachPanel

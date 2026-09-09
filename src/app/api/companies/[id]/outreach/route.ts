@@ -32,6 +32,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
+    // The company's open deal — needed so the v1.1 send automation
+    // (auto-move to Contacted, follow-up cadence, etc. — see
+    // send-approved-draft.ts) has something to act on. Prefers a deal
+    // that's still open (not Won/Lost), falling back to the most recent
+    // deal overall if every one happens to be closed already.
+    const companyDeals = await db.query.deals.findMany({
+      where: (d, { eq }) => eq(d.companyId, companyId),
+      with: { stage: true },
+      orderBy: (d, { desc }) => desc(d.createdAt),
+    });
+    const activeDeal = companyDeals.find((d) => !d.stage.isWon && !d.stage.isLost) ?? companyDeals[0] ?? null;
+
     const contact = await db.query.contacts.findFirst({
       where: eq(contacts.id, contactId),
     });
@@ -74,9 +86,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .values({
         companyId,
         contactId,
+        dealId: activeDeal?.id ?? null,
         subject: draft.subject,
         body: draft.body,
         status: "pending_review",
+        kind: "cold_outreach",
         aiRunId: draft.aiRunId,
       })
       .returning();

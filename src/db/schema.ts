@@ -107,6 +107,17 @@ export const emailDraftStatusEnum = pgEnum("email_draft_status", [
   "sent",
 ]);
 
+// What triggered an email draft — drives what happens to the deal when it's
+// sent (see sendApprovedDraft in src/lib/emails/send-approved-draft.ts) and
+// which mailbox/threading rules apply (a reply must go out from the same
+// account, in the same Gmail thread, as whatever it's replying to).
+export const emailDraftKindEnum = pgEnum("email_draft_kind", [
+  "cold_outreach", // first touch to a New Lead — sending it moves the deal to Contacted
+  "follow_up", // automated 3/6/9-day nudge, no reply yet (v1.1 cadence)
+  "bounce_correction", // re-send to a freshly-found address after the original bounced
+  "reply", // AI-drafted response to an inbound reply — sent in-thread, same mailbox
+]);
+
 export const bookingQuestionTypeEnum = pgEnum("booking_question_type", [
   "text",
   "textarea",
@@ -238,6 +249,20 @@ export const deals = pgTable("deals", {
   priority: integer("priority").notNull().default(0),
   expectedCloseDate: timestamp("expected_close_date", { withTimezone: true }),
   stageEnteredAt: timestamp("stage_entered_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // --- Email follow-up cadence (v1.1) ---
+  // lastOutboundEmailAt/lastInboundEmailAt let the cadence cron (see
+  // src/lib/emails/cadence.ts) tell "no reply yet" apart from "they replied"
+  // without re-scanning the full activities table on every run.
+  // followUpCount caps the automated 3/6/9-day nudges at 3; followUpFlaggedAt
+  // is the "needs a look" marker that both sorts the deal to the top of its
+  // board column (see listDealsForBoard) and gates the cadence cron from
+  // re-flagging something already surfaced.
+  lastOutboundEmailAt: timestamp("last_outbound_email_at", { withTimezone: true }),
+  lastInboundEmailAt: timestamp("last_inbound_email_at", { withTimezone: true }),
+  followUpCount: integer("follow_up_count").notNull().default(0),
+  followUpFlaggedAt: timestamp("follow_up_flagged_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -281,6 +306,26 @@ export const messages = pgTable("messages", {
   body: text("body"),
   generatedByAi: boolean("generated_by_ai").notNull().default(false),
   aiPromptVersion: text("ai_prompt_version"),
+
+  // --- Delivery/open/bounce tracking (v1.1) ---
+  // trackingToken is embedded in the 1x1 pixel URL (src/app/api/pixel/[token])
+  // baked into every outbound HTML email; null for inbound messages and for
+  // anything sent before this shipped (can't be retrofitted onto already-sent
+  // mail, per the original ask). rfc822MessageId is the real Message-ID
+  // header (distinct from providerMessageId, which is Gmail's internal id) —
+  // needed to build correct In-Reply-To/References headers when replying.
+  // accountIndex records which of the 3 rotating mailboxes sent or received
+  // this message, so a reply goes out from the same mailbox instead of
+  // round-robin warm-up rotation.
+  trackingToken: text("tracking_token").unique(),
+  rfc822MessageId: text("rfc822_message_id"),
+  accountIndex: integer("account_index"),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  openCount: integer("open_count").notNull().default(0),
+  bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+  bounceReason: text("bounce_reason"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -409,6 +454,13 @@ export const emailDrafts = pgTable("email_drafts", {
   subject: text("subject").notNull(),
   body: text("body").notNull(),
   status: emailDraftStatusEnum("status").notNull().default("pending_review"),
+  // What triggered this draft (v1.1) — see emailDraftKindEnum above.
+  // Defaults to cold_outreach so every pre-v1.1 draft reads correctly.
+  kind: emailDraftKindEnum("kind").notNull().default("cold_outreach"),
+  // Set only for kind = 'reply' — the inbound message being answered.
+  // sendApprovedDraft reads its threadId/accountIndex/rfc822MessageId off
+  // this row so the response goes out in-thread, from the same mailbox.
+  inReplyToMessageId: uuid("in_reply_to_message_id").references(() => messages.id),
   aiRunId: uuid("ai_run_id").references(() => aiRuns.id),
   approvedBy: uuid("approved_by").references(() => users.id),
   approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -595,6 +647,10 @@ export const emailDraftsRelations = relations(emailDrafts, ({ one }) => ({
   approver: one(users, { fields: [emailDrafts.approvedBy], references: [users.id] }),
   rejecter: one(users, { fields: [emailDrafts.rejectedBy], references: [users.id] }),
   message: one(messages, { fields: [emailDrafts.messageId], references: [messages.id] }),
+  inReplyToMessage: one(messages, {
+    fields: [emailDrafts.inReplyToMessageId],
+    references: [messages.id],
+  }),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one }) => ({

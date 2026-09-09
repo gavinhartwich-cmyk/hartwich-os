@@ -7,7 +7,9 @@ import { isAllowedEmail } from "@/lib/auth/allowlist";
 // /api/cron/* is called server-to-server by a Zo background loop (verified
 // by a CRON_SECRET bearer token inside the route, not our session cookie).
 // /book and /api/public/booking/* are the prospect-facing booking page
-// (Phase 6) — no login for prospects, obviously.
+// (Phase 6) — no login for prospects, obviously. /api/pixel/* is the v1.1
+// email open-tracking pixel — hit by recipients' mail clients loading an
+// <img>, which obviously carry no session cookie either.
 const PUBLIC_PATHS = [
   "/login",
   "/auth/error",
@@ -15,6 +17,7 @@ const PUBLIC_PATHS = [
   "/api/cron/",
   "/book",
   "/api/public/booking",
+  "/api/pixel/",
   // Required by Google's OAuth consent screen (App domain -> Application
   // privacy policy link) to move the project out of Testing mode — see
   // src/app/privacy/page.tsx.

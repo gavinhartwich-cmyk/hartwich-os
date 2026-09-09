@@ -115,7 +115,7 @@ export async function updateCompany(id: string, input: Partial<CompanyInput>) {
 // and the review-queue actions.
 // ---------------------------------------------------------------------------
 
-function normalizeCompanyName(name: string): string {
+export function normalizeCompanyName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
@@ -124,7 +124,7 @@ function normalizeCompanyName(name: string): string {
     .trim();
 }
 
-function websiteDomain(url: string | null): string | null {
+export function websiteDomain(url: string | null): string | null {
   if (!url) return null;
   try {
     return new URL(url).hostname.replace(/^www\./, "").toLowerCase();

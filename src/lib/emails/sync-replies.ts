@@ -1,71 +1,221 @@
 import "server-only";
 import { db } from "@/db";
-import { activities, messages, deals, pipelineStages } from "@/db/schema";
+import { activities, messages, deals, contacts, emailDrafts } from "@/db/schema";
 import {
   getUnreadMessages,
   getGmailMessage,
   extractFromAddress,
-  extractInReplyToMessageId,
+  extractHeader,
+  extractPlainTextBody,
+  extractAllMessageText,
 } from "@/lib/integrations/gmail-multi";
-import { eq } from "drizzle-orm";
+import type { EmailAccountIndex } from "@/lib/data/email-accounts";
+import { findStageByName, PIPELINE_STAGE_NAMES } from "@/lib/data/pipeline-stages";
+import { moveDealStage } from "@/lib/data/deals";
+import { draftReplyEmail } from "@/lib/ai/draft-outreach";
+import { enrichCompanyFromWebsite } from "@/lib/ai/enrich-company";
+import { notifyOps } from "@/lib/notifications/notify";
+import { companyUrl } from "@/lib/utils/app-url";
+import { eq, and, gte, isNull, inArray } from "drizzle-orm";
 
 export type SyncRepliesResult = {
   repliesFound: number;
   stagesUpdated: number;
+  bouncesFound: number;
   errors: string[];
 };
 
+const BOUNCE_LOOKBACK_DAYS = 7;
+
+function isBounceNotification(fromAddress: string, subject: string | null): boolean {
+  const from = fromAddress.toLowerCase();
+  if (from.startsWith("mailer-daemon@") || from.startsWith("postmaster@")) return true;
+  const s = (subject ?? "").toLowerCase();
+  return (
+    s.includes("delivery status notification") ||
+    s.includes("undelivered mail") ||
+    s.includes("delivery failure") ||
+    s.includes("mail delivery failed") ||
+    s.includes("returned to sender")
+  );
+}
+
+const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+
 /**
- * Core Gmail reply-sync logic (Phase 3/4), shared by the session-protected
- * manual-trigger route (src/app/api/emails/sync-replies) and the
- * bearer-secret cron route (src/app/api/cron/sync-replies) that a Zo
- * background loop hits on a schedule. Polls all 3 rotating Gmail accounts
- * for unread replies to our outbound emails, logs them as inbound
- * activities, and bumps the deal to the "responded/conversation" stage.
+ * Best-effort extraction of the address a bounce notification is actually
+ * about, from the DSN body text. There's no structured field we can rely on
+ * across every provider's bounce format, so this just collects every
+ * email-shaped string in the body and lets the caller match candidates
+ * against our own recent sends — the real filter is "did we send to this
+ * address recently," not "is this definitely the failed recipient field."
+ */
+function candidateBouncedAddresses(bodyText: string): string[] {
+  const found = new Set<string>();
+  for (const m of bodyText.matchAll(EMAIL_RE)) {
+    const addr = m[0].toLowerCase();
+    if (addr.startsWith("mailer-daemon@") || addr.startsWith("postmaster@")) continue;
+    found.add(addr);
+  }
+  return [...found];
+}
+
+/**
+ * Handles one bounce-notification message: matches it back to a recent
+ * outbound email by recipient address, marks that message bounced, flags
+ * the deal for review, and re-runs website enrichment to try to find a
+ * working address — per the original ask ("if bounced the ai does another
+ * search for the proper email"). Best-effort throughout: Gmail's send API
+ * gives no real delivery/bounce callback, so this is scanning DSN-shaped
+ * mail in the same inbox poll used for replies, not a guaranteed catch.
+ */
+async function handleBounceNotification(fullMsg: Awaited<ReturnType<typeof getGmailMessage>>): Promise<void> {
+  const bodyText = extractAllMessageText(fullMsg);
+  const candidates = candidateBouncedAddresses(bodyText);
+  if (candidates.length === 0) return;
+
+  const cutoff = new Date(Date.now() - BOUNCE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const bounced = await db.query.messages.findFirst({
+    where: and(
+      eq(messages.provider, "gmail"),
+      gte(messages.createdAt, cutoff),
+      isNull(messages.bouncedAt),
+      inArray(messages.toAddress, candidates)
+    ),
+    orderBy: (m, { desc }) => desc(m.createdAt),
+    with: { activity: { with: { deal: true, company: true, contact: true } } },
+  });
+  if (!bounced) return;
+
+  const reason = bodyText.slice(0, 500);
+  await db
+    .update(messages)
+    .set({ status: "bounced", bouncedAt: new Date(), bounceReason: reason })
+    .where(eq(messages.id, bounced.id));
+
+  const { company, deal, contactId } = bounced.activity;
+  if (deal) {
+    await db
+      .update(deals)
+      .set({ followUpFlaggedAt: new Date(), updatedAt: new Date() })
+      .where(eq(deals.id, deal.id));
+  }
+
+  const enrichment = company.website ? await enrichCompanyFromWebsite(company.website) : null;
+  const newEmail = enrichment?.contactEmail || enrichment?.fallbackEmail || null;
+  const foundDifferentAddress = newEmail && newEmail.toLowerCase() !== bounced.toAddress?.toLowerCase();
+
+  if (foundDifferentAddress && deal) {
+    const [newContact] = await db.transaction(async (tx) => {
+      await tx.update(contacts).set({ isPrimary: false }).where(eq(contacts.companyId, company.id));
+      return tx
+        .insert(contacts)
+        .values({
+          companyId: company.id,
+          name: enrichment!.contactName || null,
+          title: enrichment!.contactTitle || null,
+          email: newEmail,
+          phone: enrichment!.contactPhone || null,
+          linkedinUrl: enrichment!.contactLinkedinUrl || null,
+          isPrimary: true,
+          source: "manual",
+        })
+        .returning();
+    });
+
+    await db.insert(emailDrafts).values({
+      companyId: company.id,
+      contactId: newContact.id,
+      dealId: deal.id,
+      subject: bounced.subject || `Following up: ${company.name}`,
+      body: bounced.body || "",
+      status: "pending_review",
+      kind: "bounce_correction",
+    });
+  }
+
+  await db.insert(activities).values({
+    companyId: company.id,
+    contactId: contactId,
+    dealId: deal?.id ?? null,
+    type: "email",
+    direction: "inbound",
+    bodyText: foundDifferentAddress
+      ? `Original email to ${bounced.toAddress} bounced. Found a different address (${newEmail}) — a corrected draft is waiting for review.`
+      : `Original email to ${bounced.toAddress} bounced. Re-ran website research but found no other contact address — needs manual research.`,
+    aiGenerated: false,
+  });
+
+  const link = companyUrl(company.id);
+  await notifyOps(
+    `${company.name}: email bounced`,
+    (foundDifferentAddress
+      ? `The outreach email to ${bounced.toAddress} bounced. Found a different address (${newEmail}) and queued a corrected draft for review.`
+      : `The outreach email to ${bounced.toAddress} bounced. Re-searched the company's website but couldn't find another contact address — needs manual research.`) +
+      (link ? `\n\n${link}` : "")
+  );
+}
+
+/**
+ * Core Gmail reply/bounce-sync logic (Phase 3/4, reworked for v1.1), shared
+ * by the session-protected manual-trigger route (src/app/api/emails/sync-replies)
+ * and the bearer-secret cron route (src/app/api/cron/sync-replies) polled on
+ * a schedule. For each of the 3 rotating Gmail accounts' unread mail:
+ *
+ * - A bounce-notification-shaped message runs handleBounceNotification.
+ * - Anything else is matched back to one of our own sent emails by Gmail
+ *   **threadId** (not the old In-Reply-To-header match, which compared two
+ *   different ID spaces and could never succeed — see the v1.1 changelog).
+ *   A match logs the reply, moves the deal to Engaged, and drafts an
+ *   AI response for review.
  */
 export async function syncReplies(): Promise<SyncRepliesResult> {
   let repliesFound = 0;
   let stagesUpdated = 0;
+  let bouncesFound = 0;
   const errors: string[] = [];
 
   for (let accountIndex = 0; accountIndex < 3; accountIndex++) {
     try {
-      const unreadResponse = await getUnreadMessages(accountIndex as any);
-
+      const unreadResponse = await getUnreadMessages(accountIndex as EmailAccountIndex);
       if (!unreadResponse.messages) continue;
 
       for (const msgRef of unreadResponse.messages) {
         try {
-          const fullMsg = await getGmailMessage(accountIndex as any, msgRef.id!);
+          const fullMsg = await getGmailMessage(accountIndex as EmailAccountIndex, msgRef.id!);
           const headers = fullMsg.payload?.headers || [];
-
           const fromAddress = extractFromAddress(headers);
-          const inReplyToId = extractInReplyToMessageId(headers);
+          const subjectHeader = extractHeader(headers, "Subject");
+          const rfc822MessageId = extractHeader(headers, "Message-Id");
+          const threadId = fullMsg.threadId ?? null;
 
-          if (!inReplyToId) continue; // Not a reply to our email
+          if (isBounceNotification(fromAddress, subjectHeader)) {
+            await handleBounceNotification(fullMsg);
+            bouncesFound++;
+            continue;
+          }
+
+          if (!threadId) continue;
 
           const sentMessage = await db.query.messages.findFirst({
-            where: (m, { eq }) => eq(m.providerMessageId, inReplyToId),
+            where: and(eq(messages.provider, "gmail"), eq(messages.threadId, threadId)),
+            orderBy: (m, { desc }) => desc(m.createdAt),
             with: {
               activity: {
                 with: {
-                  deal: {
-                    with: {
-                      stage: true,
-                    },
-                  },
+                  deal: { with: { stage: true } },
+                  company: true,
+                  contact: true,
                 },
               },
             },
           });
 
-          if (!sentMessage) continue;
+          if (!sentMessage) continue; // not a thread we started — not ours to act on
 
-          const replyBody = fullMsg.payload?.parts?.[0]?.body?.data
-            ? Buffer.from(fullMsg.payload.parts[0].body.data, "base64").toString()
-            : "Reply received";
+          const replyBody = extractPlainTextBody(fullMsg) ?? "Reply received";
 
-          const replyActivity = await db
+          const [replyActivity] = await db
             .insert(activities)
             .values({
               companyId: sentMessage.activity.companyId,
@@ -78,19 +228,21 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
             })
             .returning();
 
-          await db
+          const [inboundMessage] = await db
             .insert(messages)
             .values({
-              activityId: replyActivity[0].id,
+              activityId: replyActivity.id,
               provider: "gmail",
               providerMessageId: msgRef.id!,
-              threadId: fullMsg.threadId,
+              threadId,
               status: "replied",
               fromAddress,
               toAddress: sentMessage.toAddress,
-              subject: `Re: ${sentMessage.subject}`,
+              subject: subjectHeader || `Re: ${sentMessage.subject}`,
               body: replyBody,
               generatedByAi: false,
+              rfc822MessageId,
+              accountIndex,
             })
             .returning();
 
@@ -98,22 +250,54 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
 
           await db.update(messages).set({ status: "replied" }).where(eq(messages.id, sentMessage.id));
 
-          if (sentMessage.activity.deal) {
-            const responseStage = await db.query.pipelineStages.findFirst({
-              where: (ps, { ilike }) => ilike(ps.name, "%responded%") || ilike(ps.name, "%conversation%"),
-            });
+          const deal = sentMessage.activity.deal;
+          if (deal) {
+            await db
+              .update(deals)
+              .set({ lastInboundEmailAt: new Date(), followUpFlaggedAt: null, updatedAt: new Date() })
+              .where(eq(deals.id, deal.id));
 
-            if (responseStage && sentMessage.activity.deal.stageId !== responseStage.id) {
-              await db
-                .update(deals)
-                .set({
-                  stageId: responseStage.id,
-                  stageEnteredAt: new Date(),
-                  updatedAt: new Date(),
-                })
-                .where(eq(deals.id, sentMessage.activity.deal.id));
-
+            const engagedStage = await findStageByName(PIPELINE_STAGE_NAMES.ENGAGED);
+            if (engagedStage && deal.stageId !== engagedStage.id) {
+              await moveDealStage(deal.id, engagedStage.id);
               stagesUpdated++;
+            }
+
+            const contactId = sentMessage.activity.contactId;
+            if (!contactId) {
+              errors.push(`Reply on message ${msgRef.id} has no known contact — can't draft a response.`);
+            } else {
+              try {
+                const draft = await draftReplyEmail({
+                  company: sentMessage.activity.company,
+                  contact: sentMessage.activity.contact,
+                  originalSubject: sentMessage.subject || "",
+                  replyText: replyBody,
+                  yourName: "Gavin Hartwich",
+                  yourCompany: "Hartwich Labs",
+                });
+
+                await db.insert(emailDrafts).values({
+                  companyId: sentMessage.activity.companyId,
+                  contactId,
+                  dealId: deal.id,
+                  subject: draft.subject,
+                  body: draft.body,
+                  status: "pending_review",
+                  kind: "reply",
+                  inReplyToMessageId: inboundMessage.id,
+                  aiRunId: draft.aiRunId,
+                });
+
+                const link = companyUrl(sentMessage.activity.companyId);
+                await notifyOps(
+                  `${sentMessage.activity.company.name} replied`,
+                  `${sentMessage.activity.company.name} replied to your outreach email and moved to Engaged. An AI-drafted response is waiting for your review.` +
+                    (link ? `\n\n${link}` : "")
+                );
+              } catch (draftErr) {
+                errors.push(`Failed to draft reply for message ${msgRef.id}: ${String(draftErr)}`);
+              }
             }
           }
         } catch (msgErr) {
@@ -125,5 +309,5 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
     }
   }
 
-  return { repliesFound, stagesUpdated, errors };
+  return { repliesFound, stagesUpdated, bouncesFound, errors };
 }

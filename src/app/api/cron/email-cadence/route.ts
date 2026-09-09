@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { syncReplies } from "@/lib/emails/sync-replies";
+import { runEmailCadence } from "@/lib/emails/cadence";
 
 function constantTimeEqual(a: string, b: string): boolean {
   const aBytes = Buffer.from(a);
@@ -17,28 +17,29 @@ function isAuthorized(request: NextRequest): boolean {
   return constantTimeEqual(auth.slice(7), secret);
 }
 
-// Unauthenticated-by-session (listed in proxy.ts PUBLIC_PATHS) but
-// bearer-secret protected, so a Zo background loop can hit this on a
-// timer without a logged-in browser session. Same sync logic as the
-// manual "Sync Replies" button — see src/lib/emails/sync-replies.ts.
+// Same bearer-secret pattern as the other 3 cron routes (sync-replies,
+// send-reminders, send-queued-emails) — public path (proxy.ts exempts
+// /api/cron/*), polled on a schedule (.github/workflows/cron.yml).
+//
+// Runs the v1.1 email follow-up cadence: flags any Contacted deal that's
+// crossed its next 3/6/9-day no-reply threshold and drafts the follow-up for
+// review — see src/lib/emails/cadence.ts.
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { repliesFound, stagesUpdated, bouncesFound, errors } = await syncReplies();
+    const { flagged, errors } = await runEmailCadence();
     return NextResponse.json({
       success: true,
-      repliesFound,
-      stagesUpdated,
-      bouncesFound,
+      flagged,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
-    console.error("Error in cron sync-replies:", error);
+    console.error("Error running email cadence:", error);
     return NextResponse.json(
-      { error: "Failed to sync replies", details: String(error) },
+      { error: "Failed to run email cadence", details: String(error) },
       { status: 500 }
     );
   }
