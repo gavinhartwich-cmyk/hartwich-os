@@ -4,6 +4,8 @@ import { listContactsForCompany } from "@/lib/data/contacts";
 import { listActivitiesForCompany } from "@/lib/data/activities";
 import { findRecentOutreachForContacts, listEmailHistoryForCompany } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
+import { isApolloConfigured } from "@/lib/integrations/apollo";
+import { isTavilyConfigured } from "@/lib/integrations/tavily";
 import FormField from "@/components/form-field";
 import StatusBadge from "@/components/status-badge";
 import PageHeader from "@/components/page-header";
@@ -14,12 +16,26 @@ import OutreachPanel from "./outreach-panel";
 import EmailHistoryPanel from "./email-history-panel";
 import { createDealAction, updateCompanyAction } from "./actions";
 
+const OWNER_LOOKUP_MESSAGES: Record<string, { tone: "ok" | "muted"; text: string }> = {
+  found: { tone: "ok", text: "Found the owner and added them as a contact." },
+  already_have: { tone: "muted", text: "Found the owner, but they're already a contact here." },
+  not_found: { tone: "muted", text: "Couldn't find an owner/decision-maker for this company." },
+  no_website: {
+    tone: "muted",
+    text: "Apollo needs a website to match by domain — add one, or use the free search lookup instead.",
+  },
+  error: { tone: "muted", text: "Something went wrong looking up the owner." },
+};
+
 export default async function CompanyDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ownerLookup?: string }>;
 }) {
   const { id } = await params;
+  const { ownerLookup } = await searchParams;
   const [company, contacts, activities, currentUser, emailHistory] = await Promise.all([
     getCompanyById(id),
     listContactsForCompany(id),
@@ -29,6 +45,7 @@ export default async function CompanyDetailPage({
   ]);
   if (!company) notFound();
 
+  const ownerLookupMessage = ownerLookup ? OWNER_LOOKUP_MESSAGES[ownerLookup] : undefined;
   const recentOutreachByContact = await findRecentOutreachForContacts(contacts.map((c) => c.id));
 
   return (
@@ -117,7 +134,17 @@ export default async function CompanyDetailPage({
 
       <div className="mt-8 grid gap-8 md:grid-cols-[1fr_260px]">
         <ActivityPanel companyId={company.id} activities={activities} contacts={contacts} />
-        <ContactsPanel companyId={company.id} contacts={contacts} />
+        <ContactsPanel
+          companyId={company.id}
+          companyName={company.name}
+          companyCity={company.city}
+          companyState={company.state}
+          hasWebsite={Boolean(company.website)}
+          apolloConfigured={isApolloConfigured()}
+          tavilyConfigured={isTavilyConfigured()}
+          contacts={contacts}
+          ownerLookupMessage={ownerLookupMessage}
+        />
       </div>
 
       <EmailHistoryPanel history={emailHistory} />

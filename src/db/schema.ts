@@ -71,6 +71,7 @@ export const messageStatusEnum = pgEnum("message_status", [
   "draft",
   "sent",
   "delivered",
+  "opened",
   "replied",
   "bounced",
   "failed",
@@ -300,6 +301,12 @@ export const messages = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   threadId: text("thread_id"),
   status: messageStatusEnum("status").notNull().default("draft"),
+  // Which of the 3 rotating Gmail accounts (0/1/2, matching
+  // GMAIL_*_1/2/3 — see email_send_accounts above) this message went out
+  // from or came in on. Needed so a reply typed on the company page goes
+  // out from the same mailbox the thread already lives in, not whichever
+  // account happens to be next in the send rotation.
+  accountIndex: integer("account_index"),
   toAddress: text("to_address"),
   fromAddress: text("from_address"),
   subject: text("subject"),
@@ -314,12 +321,8 @@ export const messages = pgTable("messages", {
   // mail, per the original ask). rfc822MessageId is the real Message-ID
   // header (distinct from providerMessageId, which is Gmail's internal id) —
   // needed to build correct In-Reply-To/References headers when replying.
-  // accountIndex records which of the 3 rotating mailboxes sent or received
-  // this message, so a reply goes out from the same mailbox instead of
-  // round-robin warm-up rotation.
   trackingToken: text("tracking_token").unique(),
   rfc822MessageId: text("rfc822_message_id"),
-  accountIndex: integer("account_index"),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   openCount: integer("open_count").notNull().default(0),

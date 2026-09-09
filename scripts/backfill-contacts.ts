@@ -1,14 +1,17 @@
 /**
- * One-time backfill for companies discovered before the Groq structured-
- * output bug fix (see the "Fix Groq 429s..." commit). Every enrichment run
- * before that fix returned null — Groq's strict JSON schema mode was
- * silently dropping the nested `decisionMaker` object, which made the
- * whole response fail Zod validation — so every existing company has no
- * website summary, no services list, and no contact.
+ * Backfill for companies with no contact on file. Originally written for
+ * companies discovered before the Groq structured-output bug fix (see the
+ * "Fix Groq 429s..." commit), it now also covers a second, longer-standing
+ * gap: discoverLeads (src/inngest/functions/discover-leads.ts) computed
+ * website enrichment but never actually passed it to createDiscoveredCompany
+ * — every automated discovery run before that fix persisted a company with
+ * no contact and no website summary, even when the scrape found one.
  *
- * Re-enriches each non-disqualified company that has a website and no
- * contact yet, then fills in the same fields createDiscoveredCompany
- * would have set at discovery time.
+ * For each non-disqualified company with no contact yet: re-run the website
+ * scrape if it has a website, then fall back to a BBB/LinkedIn web search
+ * (findDecisionMakerViaSearch — free on Tavily's tier, no-ops without
+ * TAVILY_API_KEY) if that didn't name anyone. Companies with no website
+ * skip straight to the search step instead of being skipped entirely.
  *
  * "server-only" throws when required outside Next's build (it only
  * resolves to the real no-op via the "react-server" export condition,
@@ -22,29 +25,41 @@ import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import { companies, contacts } from "../src/db/schema";
 import { enrichCompanyFromWebsite } from "../src/lib/ai/enrich-company";
+import { findDecisionMakerViaSearch, overlayDecisionMaker } from "../src/lib/ai/find-decision-maker";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
 async function main() {
   const candidates = await db.query.companies.findMany({
-    where: (company, { and, ne, isNotNull }) =>
-      and(ne(company.status, "disqualified"), isNotNull(company.website)),
+    where: (company, { ne }) => ne(company.status, "disqualified"),
     with: { contacts: true },
   });
 
   const needsBackfill = candidates.filter((c) => c.contacts.length === 0);
-  console.log(`${candidates.length} active companies with a website, ${needsBackfill.length} missing a contact.\n`);
+  console.log(`${candidates.length} active companies, ${needsBackfill.length} missing a contact.\n`);
 
   let enriched = 0;
   let contactsCreated = 0;
+  let viaSearch = 0;
   let stillNothing = 0;
 
   for (const company of needsBackfill) {
-    process.stdout.write(`${company.name} (${company.website}) ... `);
-    const enrichment = await enrichCompanyFromWebsite(company.website);
+    process.stdout.write(`${company.name} (${company.website ?? "no website"}) ... `);
+
+    let enrichment = company.website ? await enrichCompanyFromWebsite(company.website) : null;
+
+    let foundViaSearch = false;
+    if (!enrichment?.contactName) {
+      const location = [company.city, company.state].filter(Boolean).join(", ") || null;
+      const dm = await findDecisionMakerViaSearch({ companyName: company.name, location });
+      if (dm) {
+        enrichment = overlayDecisionMaker(enrichment, dm);
+        foundViaSearch = true;
+      }
+    }
 
     if (!enrichment) {
-      console.log("no enrichment (fetch/AI failed)");
+      console.log("nothing found (no website, and no search hit)");
       continue;
     }
 
@@ -83,16 +98,21 @@ async function main() {
     if (hasResearch) enriched++;
     if (hasContact) {
       contactsCreated++;
-      console.log(`contact: ${enrichment.contactName || "(no name)"} <${email || "no email"}>`);
+      if (foundViaSearch) viaSearch++;
+      console.log(
+        `contact: ${enrichment.contactName || "(no name)"} <${email || "no email"}>` +
+          (foundViaSearch ? " [via BBB/LinkedIn search]" : "")
+      );
     } else {
       stillNothing++;
-      console.log("still nothing found on the page");
+      console.log("still nothing found");
     }
   }
 
   console.log(
     `\nDone${DRY_RUN ? " (dry run, no writes)" : ""}: ${enriched} companies got research data, ` +
-      `${contactsCreated} contacts created, ${stillNothing} had no scrapeable contact info at all.`
+      `${contactsCreated} contacts created (${viaSearch} via BBB/LinkedIn search), ` +
+      `${stillNothing} had nothing found at all.`
   );
   process.exit(0);
 }
