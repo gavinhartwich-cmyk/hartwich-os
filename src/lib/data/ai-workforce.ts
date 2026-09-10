@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog, companies, deals, pipelineStages } from "@/db/schema";
 import { getAgentDb } from "@/db/agent-workforce/client";
@@ -216,17 +216,28 @@ export async function getSuppressedCount(): Promise<number> {
 
 export type FunnelCounts = { prospects: number; qualified: number; contacted: number; engaged: number; won: number };
 
-/** Reads THIS app's own tables — always available regardless of AGENT_DATABASE_URL. */
+/** Reads THIS app's own tables — always available regardless of AGENT_DATABASE_URL.
+ * Scoped to aiWorkforceCreated companies only — this is specifically the AI
+ * Workforce dashboard's own performance snapshot, not the whole CRM's, so a
+ * manually-added lead (or one from hartwich-os's own human-triggered lead
+ * mining) must not inflate what the autonomous pipeline gets credited for.
+ * The Board (src/app/(app)/board) shows everything, badged by source
+ * instead — see deal-card.tsx. */
 export async function getFunnelCounts(): Promise<FunnelCounts> {
-  const [prospectsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(companies);
+  const [prospectsRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(companies)
+    .where(eq(companies.aiWorkforceCreated, true));
   const [qualifiedRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(companies)
-    .where(eq(companies.status, "qualified"));
+    .where(and(eq(companies.status, "qualified"), eq(companies.aiWorkforceCreated, true)));
   const stageCounts = await db
     .select({ name: pipelineStages.name, isWon: pipelineStages.isWon, count: sql<number>`count(${deals.id})::int` })
     .from(pipelineStages)
-    .leftJoin(deals, eq(deals.stageId, pipelineStages.id))
+    .innerJoin(deals, eq(deals.stageId, pipelineStages.id))
+    .innerJoin(companies, eq(companies.id, deals.companyId))
+    .where(eq(companies.aiWorkforceCreated, true))
     .groupBy(pipelineStages.id, pipelineStages.name, pipelineStages.isWon);
 
   const countFor = (name: string) => stageCounts.find((s) => s.name === name)?.count ?? 0;
