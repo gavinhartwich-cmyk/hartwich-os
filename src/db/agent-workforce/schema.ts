@@ -35,7 +35,15 @@ export const experimentStatusEnum = pgEnum("experiment_status", ["running", "sto
 export const agentRuns = pgTable("agent_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
   agentId: text("agent_id").notNull(),
+  agentVersion: text("agent_version").notNull(),
+  model: text("model").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
+  input: jsonb("input").$type<unknown>(),
+  output: jsonb("output").$type<unknown>(),
+  toolCalls: jsonb("tool_calls").$type<{ tool: string; input: unknown; output: unknown }[]>().notNull().default([]),
   status: agentRunStatusEnum("status").notNull(),
+  error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
