@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useLayoutEffect, useState, useTransition } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import type { PipelineStage } from "@/lib/data/pipeline-stages";
 import type { BoardDeal } from "@/lib/data/deals";
@@ -26,6 +26,16 @@ export default function Board({
   const [, startTransition] = useTransition();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // A column with a lot of cards (e.g. New Lead) makes the whole page tall
+  // enough to scroll — and the browser's own scroll restoration (or scroll
+  // anchoring while the deals/columns paint in) tends to leave that scroll
+  // sitting wherever it last was, or partway down, instead of at the top.
+  // Force it back to the top every time this page mounts, before paint
+  // (useLayoutEffect, not useEffect) so there's no visible jump.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   function handleDragStart(event: DragStartEvent) {
     const deal = deals.find((d) => d.id === event.active.id);
