@@ -32,8 +32,6 @@ export default function CleanupPage() {
   const [cleaning, setCleaning] = useState(false);
   const [done, setDone] = useState(false);
   const [deletedCount, setDeletedCount] = useState(0);
-  const [removingStages, setRemovingStages] = useState(false);
-  const [stagesMessage, setStagesMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -87,24 +85,6 @@ export default function CleanupPage() {
     }
   }
 
-  async function removeStages() {
-    if (!confirm('Remove the "Researching" and "Qualified" columns from the board?')) {
-      return;
-    }
-
-    setRemovingStages(true);
-    setStagesMessage(null);
-    try {
-      const res = await fetch("/api/cleanup/delete-stages", { method: "DELETE" });
-      const data = await res.json();
-      setStagesMessage(data.success ? data.message : `Failed: ${data.error}`);
-    } catch (error) {
-      setStagesMessage("Error: " + (error instanceof Error ? error.message : "Unknown"));
-    } finally {
-      setRemovingStages(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -122,31 +102,6 @@ export default function CleanupPage() {
             <ArrowLeft className="size-5" />
           </Link>
           <h1 className="text-3xl font-light tracking-tight text-white">Database Cleanup</h1>
-        </div>
-
-        {/* Board columns */}
-        <div className="surface-card mb-6 p-6">
-          <h2 className="font-semibold text-white">Board columns</h2>
-          <p className="mt-1 text-sm text-white/70">
-            Removes the &quot;Researching&quot; and &quot;Qualified&quot; columns from the board. Any
-            column still holding cards is left alone — move those cards to another column first,
-            then run this again.
-          </p>
-          <button
-            onClick={removeStages}
-            disabled={removingStages}
-            className="btn-secondary mt-4"
-          >
-            {removingStages ? (
-              <>
-                <Loader2 className="mr-2 inline size-4 animate-spin" />
-                Removing...
-              </>
-            ) : (
-              'Remove "Researching" & "Qualified" columns'
-            )}
-          </button>
-          {stagesMessage && <p className="mt-3 text-sm text-white/70">{stagesMessage}</p>}
         </div>
 
         {/* Email warm-up */}
