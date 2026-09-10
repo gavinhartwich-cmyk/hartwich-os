@@ -40,7 +40,7 @@ async function capabilityStatusFromAgentRuns(agentIds: readonly string[]): Promi
     })
     .from(agentRuns)
     .where(inArray(agentRuns.agentId, agentIds as unknown as string[]));
-  return { lastActiveAt: row?.lastActiveAt ?? null, runsLast24h: row?.runsLast24h ?? 0 };
+  return { lastActiveAt: row?.lastActiveAt ? new Date(row.lastActiveAt) : null, runsLast24h: row?.runsLast24h ?? 0 };
 }
 
 export function getDiscoveryStatus(): Promise<CapabilityStatus> {
@@ -62,7 +62,7 @@ export async function getCrmActivityStatus(): Promise<CapabilityStatus> {
       runsLast24h: sql<number>`count(*) filter (where ${auditLog.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(auditLog);
-  return { lastActiveAt: row?.lastActiveAt ?? null, runsLast24h: row?.runsLast24h ?? 0 };
+  return { lastActiveAt: row?.lastActiveAt ? new Date(row.lastActiveAt) : null, runsLast24h: row?.runsLast24h ?? 0 };
 }
 
 export async function getAnalystStatus(): Promise<CapabilityStatus> {
@@ -74,7 +74,7 @@ export async function getAnalystStatus(): Promise<CapabilityStatus> {
       runsLast24h: sql<number>`count(*) filter (where ${salesForecasts.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(salesForecasts);
-  return { lastActiveAt: row?.lastActiveAt ?? null, runsLast24h: row?.runsLast24h ?? 0 };
+  return { lastActiveAt: row?.lastActiveAt ? new Date(row.lastActiveAt) : null, runsLast24h: row?.runsLast24h ?? 0 };
 }
 
 export type ManagerStatus = CapabilityStatus & { pendingEscalations24h: number };
@@ -90,7 +90,7 @@ export async function getManagerStatus(): Promise<ManagerStatus> {
     })
     .from(managerDecisions);
   return {
-    lastActiveAt: row?.lastActiveAt ?? null,
+    lastActiveAt: row?.lastActiveAt ? new Date(row.lastActiveAt) : null,
     runsLast24h: row?.runsLast24h ?? 0,
     pendingEscalations24h: row?.pendingEscalations24h ?? 0,
   };
