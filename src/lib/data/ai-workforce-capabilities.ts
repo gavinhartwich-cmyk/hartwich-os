@@ -28,8 +28,9 @@ export const CAPABILITIES: Record<CapabilityKey, CapabilityMeta> = {
     config: {
       sourceFile: "ai-workforce/src/config/icp-targets.ts + src/qualification/scoring.ts",
       values: [
-        { label: "ICP target", value: "Winnipeg, MB — \"HVAC contractor\"" },
-        { label: "Base discovery volume", value: "20 per run (the Sales Manager scales up from here)" },
+        { label: "ICP target", value: "\"HVAC contractor\" — ~60 major North America metros" },
+        { label: "Geographic rotation", value: "2 metro areas per cycle, time-based — a full sweep roughly every day and a half" },
+        { label: "Base discovery volume", value: "20 per area per run (the Sales Manager scales up from here)" },
         {
           label: "Qualification weights",
           value: "ICP fit 30% · Opportunity 25% · Contactability 15% · Business quality 15% · Timing 10% · Data confidence 5%",
