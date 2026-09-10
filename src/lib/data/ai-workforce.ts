@@ -87,13 +87,25 @@ export async function getManagerStatus(): Promise<ManagerStatus> {
     .select({
       lastActiveAt: sql<Date | null>`max(${managerDecisions.createdAt})`,
       runsLast24h: sql<number>`count(*) filter (where ${managerDecisions.createdAt} >= ${since.toISOString()})::int`,
-      pendingEscalations24h: sql<number>`count(*) filter (where ${managerDecisions.selectedAction} ilike 'Escalate to Gavin%' and ${managerDecisions.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(managerDecisions);
+
+  // Counted from manager_escalations, NOT from manager_decisions. That table
+  // is the manager's audit log — it gets a row every single cycle, so
+  // counting "Escalate to Gavin" rows there showed a number that only ever
+  // climbed (11 by mid-evening on 2026-09-10) and that nothing Gavin did
+  // could clear, because approving an escalation doesn't remove the log
+  // entries that recorded it. Open asks live in manager_escalations, and
+  // deciding one genuinely removes it from this count.
+  const [escalationRow] = await agentDb
+    .select({ pending: sql<number>`count(*)::int` })
+    .from(managerEscalations)
+    .where(eq(managerEscalations.status, "pending"));
+
   return {
     lastActiveAt: row?.lastActiveAt ? new Date(row.lastActiveAt) : null,
     runsLast24h: row?.runsLast24h ?? 0,
-    pendingEscalations24h: row?.pendingEscalations24h ?? 0,
+    pendingEscalations24h: escalationRow?.pending ?? 0,
   };
 }
 
