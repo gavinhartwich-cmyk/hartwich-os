@@ -1,5 +1,7 @@
 import "server-only";
 import { db } from "@/db";
+import { activities, messages } from "@/db/schema";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 
 export interface PendingEmailDraft {
   id: string;
@@ -33,10 +35,88 @@ function outreachWindowCutoff(): Date {
 }
 
 /**
- * The single most recent queued-or-recently-sent draft to `contactId`, if
- * any — used to block drafting/approving a duplicate. `excludeDraftId`
- * lets the approve-and-send route check for *other* drafts without
- * tripping over the very draft it's approving.
+ * The ai-workforce repo's autonomous send path (Phase 5, `ExecuteOutreachPipeline`)
+ * never touches `email_drafts` at all — it sends immediately and records
+ * straight into `activities`/`messages` (see that repo's
+ * `record_outbound_email` tool). Left unchecked, the two send paths don't
+ * know about each other: the company page's duplicate-outreach guard only
+ * looked at `email_drafts`, so a contact the AI had already emailed
+ * autonomously still showed no history here and could be drafted/sent to
+ * again by hand. This is the other half of the guard, reading the one
+ * table both send paths actually write to.
+ */
+async function findRecentAutonomousSend(contactId: string): Promise<RecentOutreach | null> {
+  const cutoff = outreachWindowCutoff();
+  const [found] = await db
+    .select({ id: activities.id, subject: messages.subject, sentAt: activities.occurredAt })
+    .from(activities)
+    .innerJoin(messages, eq(messages.activityId, activities.id))
+    .where(
+      and(
+        eq(activities.contactId, contactId),
+        eq(activities.type, "email"),
+        eq(activities.direction, "outbound"),
+        gte(activities.occurredAt, cutoff)
+      )
+    )
+    .orderBy(desc(activities.occurredAt))
+    .limit(1);
+  if (!found) return null;
+  return {
+    id: found.id,
+    status: "sent",
+    subject: found.subject ?? "(no subject)",
+    sentAt: found.sentAt,
+    approvedAt: found.sentAt,
+    createdAt: found.sentAt,
+  };
+}
+
+async function findRecentAutonomousSendsForContacts(contactIds: string[]): Promise<Record<string, RecentOutreach[]>> {
+  if (contactIds.length === 0) return {};
+  const cutoff = outreachWindowCutoff();
+  const rows = await db
+    .select({
+      id: activities.id,
+      contactId: activities.contactId,
+      subject: messages.subject,
+      sentAt: activities.occurredAt,
+    })
+    .from(activities)
+    .innerJoin(messages, eq(messages.activityId, activities.id))
+    .where(
+      and(
+        inArray(activities.contactId, contactIds),
+        eq(activities.type, "email"),
+        eq(activities.direction, "outbound"),
+        gte(activities.occurredAt, cutoff)
+      )
+    )
+    .orderBy(desc(activities.occurredAt));
+
+  const byContact: Record<string, RecentOutreach[]> = {};
+  for (const r of rows) {
+    if (!r.contactId) continue;
+    (byContact[r.contactId] ??= []).push({
+      id: r.id,
+      status: "sent",
+      subject: r.subject ?? "(no subject)",
+      sentAt: r.sentAt,
+      approvedAt: r.sentAt,
+      createdAt: r.sentAt,
+    });
+  }
+  return byContact;
+}
+
+/**
+ * The single most recent queued-or-recently-sent outreach to `contactId`,
+ * if any — used to block drafting/approving a duplicate. Checks both send
+ * paths: the human draft-and-approve queue (`email_drafts`) and
+ * ai-workforce's autonomous sends (`activities`/`messages` directly — see
+ * findRecentAutonomousSend above). `excludeDraftId` lets the
+ * approve-and-send route check for *other* drafts without tripping over
+ * the very draft it's approving.
  */
 export async function findRecentOutreach(
   contactId: string,
@@ -53,15 +133,17 @@ export async function findRecentOutreach(
     },
     orderBy: (ed, { desc }) => desc(ed.createdAt),
   });
-  if (!found) return null;
-  return {
-    id: found.id,
-    status: found.status as "approved" | "sent",
-    subject: found.subject,
-    sentAt: found.sentAt,
-    approvedAt: found.approvedAt,
-    createdAt: found.createdAt,
-  };
+  if (found) {
+    return {
+      id: found.id,
+      status: found.status as "approved" | "sent",
+      subject: found.subject,
+      sentAt: found.sentAt,
+      approvedAt: found.approvedAt,
+      createdAt: found.createdAt,
+    };
+  }
+  return findRecentAutonomousSend(contactId);
 }
 
 /**
@@ -73,14 +155,17 @@ export async function findRecentOutreachForContacts(
 ): Promise<Record<string, RecentOutreach[]>> {
   if (contactIds.length === 0) return {};
   const cutoff = outreachWindowCutoff();
-  const drafts = await db.query.emailDrafts.findMany({
-    where: (ed, { inArray, and, or, eq, gte }) =>
-      and(
-        inArray(ed.contactId, contactIds),
-        or(eq(ed.status, "approved"), and(eq(ed.status, "sent"), gte(ed.sentAt, cutoff)))
-      ),
-    orderBy: (ed, { desc }) => desc(ed.createdAt),
-  });
+  const [drafts, autonomous] = await Promise.all([
+    db.query.emailDrafts.findMany({
+      where: (ed, { inArray, and, or, eq, gte }) =>
+        and(
+          inArray(ed.contactId, contactIds),
+          or(eq(ed.status, "approved"), and(eq(ed.status, "sent"), gte(ed.sentAt, cutoff)))
+        ),
+      orderBy: (ed, { desc }) => desc(ed.createdAt),
+    }),
+    findRecentAutonomousSendsForContacts(contactIds),
+  ]);
 
   const byContact: Record<string, RecentOutreach[]> = {};
   for (const d of drafts) {
@@ -92,6 +177,12 @@ export async function findRecentOutreachForContacts(
       approvedAt: d.approvedAt,
       createdAt: d.createdAt,
     });
+  }
+  for (const [contactId, entries] of Object.entries(autonomous)) {
+    (byContact[contactId] ??= []).push(...entries);
+  }
+  for (const entries of Object.values(byContact)) {
+    entries.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
   }
   return byContact;
 }
