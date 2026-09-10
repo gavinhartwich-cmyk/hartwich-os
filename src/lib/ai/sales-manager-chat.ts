@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
-import { structuredCompletion } from "./groq-structured";
+import { structuredCompletion, GroqDailyLimitError } from "./groq-structured";
+import { groqInteractive } from "./groq";
 import {
   getFunnelCounts,
   listActiveGoalsWithForecast,
@@ -132,14 +133,36 @@ export async function replyToSalesManager(
     ? `Conversation so far:\n${historyText}\n\nGavin: ${userMessage}`
     : `Gavin: ${userMessage}`;
 
-  const result = await structuredCompletion({
-    system,
-    user,
-    schemaName: "sales_manager_chat_reply",
-    jsonSchema: JSON_SCHEMA,
-    zodSchema: ChatReplySchema,
-    maxCompletionTokens: 1024,
-  });
+  let result;
+  try {
+    result = await structuredCompletion({
+      system,
+      user,
+      schemaName: "sales_manager_chat_reply",
+      jsonSchema: JSON_SCHEMA,
+      zodSchema: ChatReplySchema,
+      maxCompletionTokens: 1024,
+      // Uses the dedicated chat key when one is configured, so a heavy
+      // discovery day can't leave this conversation unable to answer.
+      client: groqInteractive,
+    });
+  } catch (err) {
+    // Worth saying out loud rather than hiding behind "try again in a
+    // moment": this state lasts hours, and the honest version tells Gavin
+    // the discovery agents ate the shared budget, so he can act on it
+    // (pause discovery, wait it out) instead of retrying into the same wall.
+    if (err instanceof GroqDailyLimitError) {
+      const when =
+        err.retryAfterMinutes === null
+          ? "It frees up as the day's usage rolls off."
+          : `It should free up in roughly ${err.retryAfterMinutes} minute(s).`;
+      return {
+        reply: `I'm out of AI budget right now — the free Groq tier's daily token allowance is spent, mostly by the discovery agents, and this conversation shares that same pool. ${when} Goal tracking, forecasts and the agents' own decision loop keep running normally; it's only the talking part that needs the model.`,
+        proposedGoal: null,
+      };
+    }
+    throw err;
+  }
 
   if (!result) {
     return {
