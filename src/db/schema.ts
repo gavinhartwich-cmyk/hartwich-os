@@ -677,3 +677,36 @@ export const apiRateLimits = pgTable("api_rate_limits", {
   windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
   count: integer("count").notNull().default(1),
 });
+
+// ---------------------------------------------------------------------------
+// ai_workforce_chat_messages — the conversation with the Sales Manager
+// (/ai-workforce/chat). This app's own table, not ai-workforce's — the
+// transcript is a UI-layer concern (like audit_log), not part of
+// ai-workforce's domain model. A single global thread (Gavin-only feature,
+// same as the rest of /ai-workforce — no per-user threading needed).
+//
+// proposedGoal is set only on an assistant message that offered to create
+// a new sales_goals row — never created automatically. Gavin confirms it
+// explicitly (confirmGoalProposal, src/lib/actions/ai-workforce-chat.ts),
+// which writes the real row into ai-workforce's own database (the same
+// "one deliberate exception" pattern src/lib/actions/ai-workforce.ts's
+// kill switch already uses) and stamps confirmedAt here so the same
+// proposal can't be confirmed twice.
+// ---------------------------------------------------------------------------
+
+export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
+
+export const aiWorkforceChatMessages = pgTable("ai_workforce_chat_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  role: chatRoleEnum("role").notNull(),
+  content: text("content").notNull(),
+  proposedGoal: jsonb("proposed_goal").$type<{
+    metric: string;
+    target: number;
+    periodDays: number;
+    priority: string;
+    rationale: string;
+  } | null>(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
