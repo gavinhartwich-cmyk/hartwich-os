@@ -255,6 +255,32 @@ export async function getUnreadMessages(accountIndex: EmailAccountIndex) {
 }
 
 /**
+ * Removes the UNREAD label from a message — called once sync-replies.ts has
+ * fully processed one it identified as ours (a reply in one of our threads,
+ * or a bounce notification for one of our sends). Without this, `is:unread`
+ * keeps returning the same message on every future poll forever (Gmail
+ * never auto-marks anything read on our behalf), which would re-run the
+ * whole reply/bounce handling — including a fresh AI draft and a fresh
+ * ops-notification email — every ~15 minutes until a human happens to open
+ * it in Gmail. Deliberately never called for a message that turned out not
+ * to be ours (no matching thread) — that's not ours to mark read.
+ */
+export async function markMessageRead(accountIndex: EmailAccountIndex, messageId: string): Promise<void> {
+  try {
+    const gmail = getGmailClient(accountIndex);
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: { removeLabelIds: ["UNREAD"] },
+    });
+  } catch (error) {
+    // Non-fatal — worst case this message gets reprocessed next run, which
+    // the providerMessageId dedup guard in sync-replies.ts still catches.
+    console.error(`Failed to mark Gmail message ${messageId} read (account ${accountIndex}):`, error);
+  }
+}
+
+/**
  * Extract email address from Gmail message
  */
 export function extractFromAddress(headers: any[]): string {
