@@ -38,6 +38,11 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Must match src/lib/supabase/server.ts's cookieOptions — this
+      // client rewrites the session cookie on every request (token
+      // refresh), so if this ever drifted from httpOnly:true, the next
+      // refresh here would silently downgrade it back to script-readable.
+      cookieOptions: { httpOnly: true },
       cookies: {
         getAll() {
           return request.cookies.getAll();
