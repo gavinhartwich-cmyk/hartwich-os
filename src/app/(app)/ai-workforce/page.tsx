@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Search, Mail, MessageSquare, Database, BarChart3, Brain, AlertTriangle } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import Reveal from "@/components/reveal";
@@ -159,6 +160,11 @@ export default async function AiWorkforcePage() {
       <PageHeader
         title="AI Workforce"
         subtitle="Hartwich Labs' autonomous sales workforce — discovery, outreach, conversations, CRM upkeep, analysis, and the Sales Manager loop that ties them together."
+        action={
+          <Link href="/ai-workforce/chat" className="btn-primary">
+            Talk to the Sales Manager
+          </Link>
+        }
       />
 
       {!agentDbReady && (
