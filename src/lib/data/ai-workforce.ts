@@ -22,7 +22,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * only changes when ai-workforce adds a new agent (a code change on both
  * sides either way).
  */
-const CAPABILITY_AGENT_IDS = {
+export const CAPABILITY_AGENT_IDS = {
   discovery: ["prospect_discovery_agent", "research_agent", "qualification_agent", "company_review_agent"],
   outreach: ["outreach_strategy_agent", "outreach_generation_agent", "outreach_followup_agent"],
   conversations: ["conversation_intelligence_agent", "outreach_reply_agent", "appointment_agent"],
@@ -250,4 +250,85 @@ export async function listRecentAiActivity(limit = 8): Promise<RecentActivity[]>
     .from(auditLog)
     .orderBy(desc(auditLog.createdAt))
     .limit(limit);
+}
+
+export type AgentRunSummary = {
+  id: string;
+  agentId: string;
+  agentVersion: string;
+  model: string;
+  startedAt: Date;
+  finishedAt: Date;
+  status: "succeeded" | "failed" | "denied";
+  error: string | null;
+  input: unknown;
+  output: unknown;
+  toolCalls: { tool: string; input: unknown; output: unknown }[];
+};
+
+/** The per-agent drill-down (AI Workforce dashboard, click a node) — every real
+ * AgentRuntime.run() for one capability's agent ids, most recent first,
+ * full input/output/toolCalls so "what did it actually do" is answerable
+ * without leaving this app. Discovery/Outreach/Conversations only —
+ * Analyst and Manager are deliberately LLM-free (see listRecentForecasts /
+ * listRecentManagerDecisions), and CRM reads this app's own audit_log
+ * (listRecentAiActivity), not agent_runs. */
+export async function listRecentAgentRuns(agentIds: readonly string[], limit = 20): Promise<AgentRunSummary[]> {
+  const agentDb = getAgentDb();
+  const rows = await agentDb.query.agentRuns.findMany({
+    where: (r, { inArray }) => inArray(r.agentId, agentIds as string[]),
+    orderBy: (r, { desc }) => desc(r.startedAt),
+    limit,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    agentId: r.agentId,
+    agentVersion: r.agentVersion,
+    model: r.model,
+    startedAt: r.startedAt,
+    finishedAt: r.finishedAt,
+    status: r.status,
+    error: r.error,
+    input: r.input,
+    output: r.output,
+    toolCalls: r.toolCalls,
+  }));
+}
+
+export type ForecastSnapshot = {
+  id: string;
+  goalId: string;
+  goalMetric: string;
+  asOf: Date;
+  currentValue: number;
+  projectedFinal: number;
+  probability: number;
+  status: string;
+};
+
+/** The Analyst capability's own activity trail — it's deliberately LLM-free
+ * (deterministic KPI/pace/forecast math), so its "recent runs" are the
+ * forecast snapshots it recorded, not agent_runs rows. */
+export async function listRecentForecasts(limit = 20): Promise<ForecastSnapshot[]> {
+  const agentDb = getAgentDb();
+  const rows = await agentDb.query.salesForecasts.findMany({
+    orderBy: (f, { desc }) => desc(f.asOf),
+    limit,
+  });
+  if (rows.length === 0) return [];
+
+  const goalIds = [...new Set(rows.map((r) => r.goalId))];
+  const goals = await agentDb.select({ id: salesGoals.id, metric: salesGoals.metric }).from(salesGoals).where(inArray(salesGoals.id, goalIds));
+  const metricByGoal = new Map(goals.map((g) => [g.id, g.metric]));
+
+  return rows.map((r) => ({
+    id: r.id,
+    goalId: r.goalId,
+    goalMetric: metricByGoal.get(r.goalId) ?? "unknown",
+    asOf: r.asOf,
+    currentValue: Number(r.currentValue),
+    projectedFinal: Number(r.projectedFinal),
+    probability: r.probability,
+    status: r.status,
+  }));
 }

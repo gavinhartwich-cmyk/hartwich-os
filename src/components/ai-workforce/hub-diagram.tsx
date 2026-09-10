@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import AmbientOrb from "@/components/ambient-orb";
 
@@ -34,8 +35,9 @@ function NodeCard({ node }: { node: HubNode }) {
   const style = STATUS_STYLES[node.status];
   const Icon = node.icon;
   return (
-    <div
-      className={`surface-card surface-card-hover flex items-center gap-2.5 border px-3 py-2.5 ${style.border}`}
+    <Link
+      href={`/ai-workforce/${node.key}`}
+      className={`surface-card surface-card-hover flex items-center gap-2.5 border px-3 py-2.5 transition-transform duration-150 ease-[var(--ease-spring)] hover:scale-[1.03] ${style.border}`}
       style={{ width: 168 }}
     >
       <Icon className={`size-4 shrink-0 ${style.text}`} />
@@ -46,7 +48,7 @@ function NodeCard({ node }: { node: HubNode }) {
           {node.sublabel}
         </p>
       </div>
-    </div>
+    </Link>
   );
 }
 
