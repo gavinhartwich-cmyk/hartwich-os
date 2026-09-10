@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { computeAvailability, getBookingSettings } from "@/lib/booking/availability";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 /**
  * GET /api/public/booking/availability
@@ -7,7 +8,11 @@ import { computeAvailability, getBookingSettings } from "@/lib/booking/availabil
  * against Google Calendar on every request (no caching) so it's never
  * stale enough to double-book someone.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!(await checkRateLimit(`booking-availability:${clientIp(request)}`, 60))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
+
   const settings = await getBookingSettings();
   const days = await computeAvailability(settings);
 

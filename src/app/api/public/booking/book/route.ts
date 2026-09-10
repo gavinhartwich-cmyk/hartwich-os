@@ -4,6 +4,7 @@ import { getBookingSettings, isSlotStillAvailable } from "@/lib/booking/availabi
 import { createBooking, listBookingQuestions } from "@/lib/data/bookings";
 import { getCompanyById } from "@/lib/data/companies";
 import { sendEmailViaGmail } from "@/lib/integrations/gmail-multi";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 const BookSchema = z.object({
   slotStart: z.string().datetime(),
@@ -20,6 +21,10 @@ const BookSchema = z.object({
  * touching the calendar or the database.
  */
 export async function POST(request: NextRequest) {
+  if (!(await checkRateLimit(`booking-book:${clientIp(request)}`, 5))) {
+    return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+  }
+
   let input: z.infer<typeof BookSchema>;
   try {
     input = BookSchema.parse(await request.json());
