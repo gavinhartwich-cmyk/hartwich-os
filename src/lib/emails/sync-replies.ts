@@ -8,6 +8,7 @@ import {
   extractHeader,
   extractPlainTextBody,
   extractAllMessageText,
+  markMessageRead,
 } from "@/lib/integrations/gmail-multi";
 import type { EmailAccountIndex } from "@/lib/data/email-accounts";
 import { findStageByName, PIPELINE_STAGE_NAMES } from "@/lib/data/pipeline-stages";
@@ -29,8 +30,17 @@ const BOUNCE_LOOKBACK_DAYS = 7;
 
 function isBounceNotification(fromAddress: string, subject: string | null): boolean {
   const from = fromAddress.toLowerCase();
-  if (from.startsWith("mailer-daemon@") || from.startsWith("postmaster@")) return true;
   const s = (subject ?? "").toLowerCase();
+
+  // Gmail (and most MTAs) send a *temporary* delay notice from the exact
+  // same mailer-daemon address, with a subject nearly identical to a final
+  // failure ("Delivery Status Notification (Delay)" vs "(Failure)", or a
+  // bare "Delivery incomplete" that explicitly says it's still retrying) —
+  // treating that as a bounce flags the deal and re-searches for a
+  // "corrected" address the original send never actually needed.
+  if (/\bdelay(ed)?\b|incomplete|will retry|temporar(y|ily)/.test(s)) return false;
+
+  if (from.startsWith("mailer-daemon@") || from.startsWith("postmaster@")) return true;
   return (
     s.includes("delivery status notification") ||
     s.includes("undelivered mail") ||
@@ -192,10 +202,28 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
           if (isBounceNotification(fromAddress, subjectHeader)) {
             await handleBounceNotification(fullMsg);
             bouncesFound++;
+            // Mark it read regardless of whether a match was found — either
+            // way we've fully evaluated this notification; nothing left to
+            // learn by re-fetching and re-scanning it again next run.
+            await markMessageRead(accountIndex as EmailAccountIndex, msgRef.id!);
             continue;
           }
 
           if (!threadId) continue;
+
+          // Already processed on a prior run? `is:unread` keeps returning a
+          // message until markMessageRead below actually clears the label —
+          // this is the belt-and-suspenders check for when that call failed
+          // (or hasn't happened yet on an in-flight run), so a flaky Gmail
+          // API response never turns into a duplicate AI-drafted reply and
+          // a duplicate ops-notification email sent to Noa.
+          const alreadyProcessed = await db.query.messages.findFirst({
+            where: and(eq(messages.provider, "gmail"), eq(messages.providerMessageId, msgRef.id!)),
+          });
+          if (alreadyProcessed) {
+            await markMessageRead(accountIndex as EmailAccountIndex, msgRef.id!);
+            continue;
+          }
 
           const sentMessage = await db.query.messages.findFirst({
             where: and(eq(messages.provider, "gmail"), eq(messages.threadId, threadId)),
@@ -300,6 +328,8 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
               }
             }
           }
+
+          await markMessageRead(accountIndex as EmailAccountIndex, msgRef.id!);
         } catch (msgErr) {
           errors.push(`Failed to process message ${msgRef.id}: ${String(msgErr)}`);
         }
