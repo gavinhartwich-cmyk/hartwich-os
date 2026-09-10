@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "ai_workforce_created" boolean DEFAULT false NOT NULL;

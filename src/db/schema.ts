@@ -182,6 +182,17 @@ export const companies = pgTable("companies", {
 
   source: companySourceEnum("source").notNull(),
   sourceRefId: text("source_ref_id"), // e.g. Google Places place_id
+  // `source` says HOW a lead was found (Google Places/Apollo/typed in by
+  // hand) — it does NOT say WHO created the row. Both hartwich-os's own
+  // built-in lead mining (Noah triggers it manually from this app) and the
+  // separate ai-workforce repo's fully autonomous agent pipeline (nobody
+  // triggers it — it runs on its own cron) write source: "google_places",
+  // making them indistinguishable without this column. Set to true only
+  // by ai-workforce's write-store.ts; everything else (manual entry, or
+  // Noah running this app's own discovery) leaves it false. The Board's
+  // "AI" badge and every AI Workforce dashboard metric filter on this,
+  // not on `source`.
+  aiWorkforceCreated: boolean("ai_workforce_created").notNull().default(false),
 
   // --- ICP / qualification signals (architecture doc §5) ---
   googleReviewCount: integer("google_review_count"),
