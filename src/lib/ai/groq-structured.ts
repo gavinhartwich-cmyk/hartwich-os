@@ -1,4 +1,5 @@
 import "server-only";
+import type Groq from "groq-sdk";
 import type { z } from "zod";
 import { groq } from "./groq";
 
@@ -28,10 +29,59 @@ function isRateLimitError(err: unknown): err is { status: number; message?: stri
   return typeof err === "object" && err !== null && "status" in err && (err as { status: unknown }).status === 429;
 }
 
+/**
+ * Thrown (rather than folded into the generic `null` return) so a caller can
+ * distinguish "the shared daily AI budget is spent" — a real, explainable
+ * state that lasts hours — from an ordinary transient failure.
+ */
+export class GroqDailyLimitError extends Error {
+  readonly name = "GroqDailyLimitError";
+
+  /** Minutes until Groq says the budget frees up, when its error states one. */
+  readonly retryAfterMinutes: number | null;
+
+  constructor(message: string) {
+    super(message);
+    const match = message.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i);
+    if (!match || (!match[1] && !match[2] && !match[3])) {
+      this.retryAfterMinutes = null;
+    } else {
+      const totalSeconds = Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+      this.retryAfterMinutes = totalSeconds > 0 ? Math.ceil(totalSeconds / 60) : null;
+    }
+  }
+}
+
+/**
+ * True for a 429 against the *daily* token allowance (TPD) rather than the
+ * per-minute one (TPM). Groq words it as e.g. "Rate limit reached ... on
+ * tokens per day (TPD): Limit 200000, Used 198528".
+ *
+ * The two want opposite handling: a TPM 429 clears in seconds and should be
+ * waited out, while a TPD 429 means the day's budget is gone — retrying only
+ * makes the caller wait longer to fail, and callers want to say so plainly
+ * rather than show a generic "try again in a moment".
+ */
+export function isDailyTokenLimitError(err: unknown): boolean {
+  const message =
+    typeof err === "object" && err !== null && "message" in err
+      ? String((err as { message: unknown }).message)
+      : "";
+  return /tokens per day|\bTPD\b/i.test(message);
+}
+
+/**
+ * Groq's suggested wait, in ms. The duration is a Go-style string, so it can
+ * carry hour/minute parts ("7m59.52s", "1h2m3s") — parsing only a bare
+ * `([\d.]+)s` silently missed those and fell back to the 5s default, so a
+ * 7-minute wait got retried 3 times over ~15 seconds and failed anyway
+ * (Gavin, 2026-09-10).
+ */
 function retryDelayMs(err: { message?: string }): number {
-  const match = err.message?.match(/try again in ([\d.]+)s/i);
-  const seconds = match ? Number(match[1]) : null;
-  return seconds && Number.isFinite(seconds) ? Math.ceil(seconds * 1000) + 250 : DEFAULT_RETRY_DELAY_MS;
+  const match = err.message?.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i);
+  if (!match || (!match[1] && !match[2] && !match[3])) return DEFAULT_RETRY_DELAY_MS;
+  const seconds = Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1000) + 250 : DEFAULT_RETRY_DELAY_MS;
 }
 
 function sleep(ms: number) {
@@ -51,7 +101,10 @@ function sleep(ms: number) {
  * truth for validating what actually comes back (and for the TS type).
  *
  * Returns null on any failure (bad response, non-JSON content, schema
- * mismatch) — callers treat that the same as an API error.
+ * mismatch) — callers treat that the same as an API error. The one exception
+ * is a daily-token-limit 429, which throws GroqDailyLimitError so callers can
+ * explain that specific (hours-long) state rather than showing a generic
+ * transient-failure message.
  */
 export async function structuredCompletion<T>(opts: {
   system: string;
@@ -62,11 +115,14 @@ export async function structuredCompletion<T>(opts: {
   model?: string;
   /** Defaults to 1024 — override for call sites whose expected output (e.g. a full email body) runs longer than a compact JSON result. */
   maxCompletionTokens?: number;
+  /** Defaults to the shared agent key. Pass `groqInteractive` for human-facing calls that shouldn't be starved by batch agent work. */
+  client?: Groq;
 }): Promise<StructuredCompletionResult<T> | null> {
+  const client = opts.client ?? groq;
   let response;
   for (let attempt = 0; ; attempt++) {
     try {
-      response = await groq.chat.completions.create({
+      response = await client.chat.completions.create({
         model: opts.model ?? GROQ_STRUCTURED_MODEL,
         max_completion_tokens: opts.maxCompletionTokens ?? 1024,
         messages: [
@@ -80,6 +136,11 @@ export async function structuredCompletion<T>(opts: {
       });
       break;
     } catch (err) {
+      // The day's budget is gone — retrying can't help, and callers want to
+      // tell the user that specifically rather than "try again in a moment".
+      if (isRateLimitError(err) && isDailyTokenLimitError(err)) {
+        throw new GroqDailyLimitError(err.message ?? "Groq daily token limit reached.");
+      }
       if (isRateLimitError(err) && attempt < MAX_RATE_LIMIT_RETRIES) {
         await sleep(retryDelayMs(err));
         continue;
