@@ -1,0 +1,1 @@
+ALTER TABLE "email_send_accounts" ADD COLUMN "active_send_days" integer DEFAULT 0 NOT NULL;

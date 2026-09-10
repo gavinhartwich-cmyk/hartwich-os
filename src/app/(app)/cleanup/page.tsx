@@ -15,7 +15,7 @@ type AccountWarmupStatus = {
   accountIndex: 0 | 1 | 2;
   fromAddress: string | null;
   warmupStatus: string;
-  daysSinceStart: number;
+  activeSendDays: number;
   dailyLimit: number | null;
   sentToday: number;
   lastSentAt: string | null;
@@ -154,8 +154,9 @@ export default function CleanupPage() {
           <h2 className="font-semibold text-white">Email warm-up</h2>
           <p className="mt-1 text-sm text-white/70">
             Per-account sending ramp — a fresh Gmail account is deliberately capped well below
-            Gmail&apos;s own limit while it builds sender reputation. See src/lib/warmup/schedule.ts
-            for the exact ramp.
+            Gmail&apos;s own limit while it builds sender reputation. Progress counts days the
+            mailbox actually sent on (AI agents included, since they use these same mailboxes), so
+            an idle day doesn&apos;t advance the ramp.
           </p>
           {!warmup ? (
             <p className="mt-4 text-sm text-white/50">Loading…</p>
@@ -164,11 +165,11 @@ export default function CleanupPage() {
               {warmup.map((a) => {
                 const dayLabel = a.complete
                   ? "Warmed up"
-                  : `Day ${a.daysSinceStart} of ${WARMUP_TOTAL_RAMP_DAYS}`;
+                  : `Sending day ${a.activeSendDays} of ${WARMUP_TOTAL_RAMP_DAYS}`;
                 const limitLabel = a.dailyLimit === null ? "no daily cap" : `${a.dailyLimit}/day`;
                 const progressPct = a.complete
                   ? 100
-                  : Math.min(100, Math.round((a.daysSinceStart / WARMUP_TOTAL_RAMP_DAYS) * 100));
+                  : Math.min(100, Math.round((a.activeSendDays / WARMUP_TOTAL_RAMP_DAYS) * 100));
                 return (
                   <div key={a.accountIndex} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <p className="truncate text-sm font-medium text-white">

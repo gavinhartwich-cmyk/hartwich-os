@@ -509,6 +509,22 @@ export const emailSendAccounts = pgTable("email_send_accounts", {
   dailySendCount: integer("daily_send_count").notNull().default(0),
   lastSendResetAt: timestamp("last_send_reset_at", { withTimezone: true }),
   lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
+  /**
+   * Distinct days this mailbox has actually sent on (Winnipeg calendar),
+   * counting today once it sends. This — not elapsed calendar time — is what
+   * drives the warm-up ramp.
+   *
+   * The ramp used to key off `warmupStartedAt` and wall-clock days, so an
+   * idle mailbox still "graduated": on 2026-09-10 account 0 showed day 8 of
+   * 29 (cleared for 10/day) having actually sent on only 4 days, and a
+   * mailbox left alone three weeks would have reached 35/day having sent
+   * almost nothing. Warm-up is about the reputation a mailbox earns by
+   * sending, so silence has to not count (Gavin, 2026-09-10).
+   *
+   * Counts sends from every source — the AI agents send from these same
+   * three mailboxes, so their volume builds the same reputation.
+   */
+  activeSendDays: integer("active_send_days").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
