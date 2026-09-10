@@ -88,7 +88,9 @@ export const experiments = pgTable("experiments", {
 
 export const experimentVariants = pgTable("experiment_variants", {
   id: uuid("id").defaultRandom().primaryKey(),
-  experimentId: uuid("experiment_id").notNull(),
+  experimentId: uuid("experiment_id")
+    .notNull()
+    .references(() => experiments.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   directive: text("directive").notNull(),
   weight: numeric("weight", { precision: 5, scale: 2 }).notNull().default("1"),
@@ -96,6 +98,10 @@ export const experimentVariants = pgTable("experiment_variants", {
 
 export const experimentsRelations = relations(experiments, ({ many }) => ({
   variants: many(experimentVariants),
+}));
+
+export const experimentVariantsRelations = relations(experimentVariants, ({ one }) => ({
+  experiment: one(experiments, { fields: [experimentVariants.experimentId], references: [experiments.id] }),
 }));
 
 /** The kill switch (ai-workforce's SPEC.md §57: "stop this campaign"). Single row, id="default". */
