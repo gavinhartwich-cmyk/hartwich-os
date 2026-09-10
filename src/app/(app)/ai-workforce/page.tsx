@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Search, Mail, MessageSquare, Database, BarChart3, Brain, AlertTriangle } from "lucide-react";
 import PageHeader from "@/components/page-header";
 import Reveal from "@/components/reveal";
@@ -42,9 +43,17 @@ function relativeTime(date: Date | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/**
+ * Gavin-only (see lib/auth/allowlist.ts isBookingAdmin) — the nav already
+ * hides this link from Noah; this redirect is the defensive server-side
+ * check, same pattern as (app)/calendar/settings/page.tsx.
+ */
 export default async function AiWorkforcePage() {
   const user = await getCurrentAppUser();
-  const canControl = isBookingAdmin(user?.email);
+  if (!user || !isBookingAdmin(user.email)) {
+    redirect("/board");
+  }
+  const canControl = true;
   const agentDbReady = isAgentDbConfigured();
 
   // Always available — this app's own tables, no dependency on ai-workforce's database.

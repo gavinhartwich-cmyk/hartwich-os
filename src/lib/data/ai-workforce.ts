@@ -36,7 +36,7 @@ async function capabilityStatusFromAgentRuns(agentIds: readonly string[]): Promi
   const [row] = await agentDb
     .select({
       lastActiveAt: sql<Date | null>`max(${agentRuns.createdAt})`,
-      runsLast24h: sql<number>`count(*) filter (where ${agentRuns.createdAt} >= ${since})::int`,
+      runsLast24h: sql<number>`count(*) filter (where ${agentRuns.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(agentRuns)
     .where(inArray(agentRuns.agentId, agentIds as unknown as string[]));
@@ -59,7 +59,7 @@ export async function getCrmActivityStatus(): Promise<CapabilityStatus> {
   const [row] = await db
     .select({
       lastActiveAt: sql<Date | null>`max(${auditLog.createdAt})`,
-      runsLast24h: sql<number>`count(*) filter (where ${auditLog.createdAt} >= ${since})::int`,
+      runsLast24h: sql<number>`count(*) filter (where ${auditLog.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(auditLog);
   return { lastActiveAt: row?.lastActiveAt ?? null, runsLast24h: row?.runsLast24h ?? 0 };
@@ -71,7 +71,7 @@ export async function getAnalystStatus(): Promise<CapabilityStatus> {
   const [row] = await agentDb
     .select({
       lastActiveAt: sql<Date | null>`max(${salesForecasts.createdAt})`,
-      runsLast24h: sql<number>`count(*) filter (where ${salesForecasts.createdAt} >= ${since})::int`,
+      runsLast24h: sql<number>`count(*) filter (where ${salesForecasts.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(salesForecasts);
   return { lastActiveAt: row?.lastActiveAt ?? null, runsLast24h: row?.runsLast24h ?? 0 };
@@ -85,8 +85,8 @@ export async function getManagerStatus(): Promise<ManagerStatus> {
   const [row] = await agentDb
     .select({
       lastActiveAt: sql<Date | null>`max(${managerDecisions.createdAt})`,
-      runsLast24h: sql<number>`count(*) filter (where ${managerDecisions.createdAt} >= ${since})::int`,
-      pendingEscalations24h: sql<number>`count(*) filter (where ${managerDecisions.selectedAction} ilike 'Escalate to Gavin%' and ${managerDecisions.createdAt} >= ${since})::int`,
+      runsLast24h: sql<number>`count(*) filter (where ${managerDecisions.createdAt} >= ${since.toISOString()})::int`,
+      pendingEscalations24h: sql<number>`count(*) filter (where ${managerDecisions.selectedAction} ilike 'Escalate to Gavin%' and ${managerDecisions.createdAt} >= ${since.toISOString()})::int`,
     })
     .from(managerDecisions);
   return {

@@ -8,13 +8,16 @@ const LINKS = [
   { href: "/calendar", label: "Calendar" },
   { href: "/companies", label: "Companies" },
   { href: "/leads/review", label: "Review Queue" },
-  { href: "/ai-workforce", label: "AI Workforce" },
   { href: "/cleanup", label: "Cleanup" },
 ];
 
 // Gavin-only (see lib/auth/allowlist.ts isBookingAdmin) — Noah doesn't need
-// booking link/settings, so the layout only passes this when it applies.
+// booking link/settings or the AI Workforce dashboard, so the layout only
+// passes these when it applies. Same flag gates both; the page itself also
+// redirects non-admins server-side (app/(app)/ai-workforce/page.tsx), same
+// defensive-check pattern as (app)/calendar/settings/page.tsx.
 const BOOKING_ADMIN_LINK = { href: "/calendar/settings", label: "Booking" };
+const AI_WORKFORCE_LINK = { href: "/ai-workforce", label: "AI Workforce" };
 
 export default function NavLinks({
   showBookingAdmin = false,
@@ -27,7 +30,9 @@ export default function NavLinks({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const links = showBookingAdmin ? [...LINKS, BOOKING_ADMIN_LINK] : LINKS;
+  const links = showBookingAdmin
+    ? [...LINKS.slice(0, 4), AI_WORKFORCE_LINK, ...LINKS.slice(4), BOOKING_ADMIN_LINK]
+    : LINKS;
 
   return (
     <nav className={stacked ? "flex flex-col gap-1" : "pill-nav"}>
