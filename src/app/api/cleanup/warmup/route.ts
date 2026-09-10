@@ -6,7 +6,8 @@ export type AccountWarmupStatus = {
   accountIndex: 0 | 1 | 2;
   fromAddress: string | null;
   warmupStatus: string;
-  daysSinceStart: number;
+  /** Distinct days this mailbox has actually sent on — what the ramp keys off. */
+  activeSendDays: number;
   /** null = fully warmed up, no daily cap. */
   dailyLimit: number | null;
   sentToday: number;
@@ -22,6 +23,9 @@ export type AccountWarmupStatus = {
  * re-deriving it, so this can never drift from what's actually allowed to
  * go out. From-addresses come from env (GMAIL_FROM_ADDRESS_1..3) — the
  * email_send_accounts table itself has no address column, only ramp state.
+ *
+ * Progress is reported in *sending* days, not calendar days: an idle mailbox
+ * doesn't advance (see email_send_accounts.active_send_days).
  */
 export async function GET() {
   const rows = await db.query.emailSendAccounts.findMany();
@@ -37,8 +41,8 @@ export async function GET() {
         accountIndex,
         fromAddress,
         warmupStatus: "not_started",
-        daysSinceStart: 0,
-        dailyLimit: getWarmupPhase(null).dailyLimit,
+        activeSendDays: 0,
+        dailyLimit: getWarmupPhase(0).dailyLimit,
         sentToday: 0,
         lastSentAt: null,
         complete: false,
@@ -46,18 +50,18 @@ export async function GET() {
       };
     }
 
-    const { daysSinceStart, dailyLimit } = getWarmupPhase(row.warmupStartedAt);
+    const { activeSendDays, dailyLimit } = getWarmupPhase(row.activeSendDays);
     const sentToday = shouldResetDailyCounter(row.lastSendResetAt) ? 0 : row.dailySendCount;
 
     return {
       accountIndex,
       fromAddress,
       warmupStatus: row.warmupStatus,
-      daysSinceStart,
+      activeSendDays,
       dailyLimit: row.warmupStatus === "ready" ? null : dailyLimit,
       sentToday,
       lastSentAt: row.lastSentAt?.toISOString() ?? null,
-      complete: isWarmupComplete(row.warmupStartedAt),
+      complete: isWarmupComplete(row.activeSendDays),
       configured,
     };
   });

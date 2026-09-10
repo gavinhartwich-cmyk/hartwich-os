@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { emailSendAccounts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { canSendEmail, shouldResetDailyCounter, getTodayMidnightWinnipeg } from "@/lib/warmup/schedule";
+import { canSendEmail, shouldResetDailyCounter, getTodayMidnightWinnipeg, startsNewSendDay } from "@/lib/warmup/schedule";
 
 export type EmailAccountIndex = 0 | 1 | 2;
 const ACCOUNT_INDICES: EmailAccountIndex[] = [0, 1, 2];
@@ -54,7 +54,7 @@ export async function pickAvailableAccount(): Promise<EmailAccountIndex | null> 
   for (let offset = 1; offset <= 3; offset++) {
     const candidate = ((startAfter + offset) % 3) as EmailAccountIndex;
     const fresh = await withFreshDailyCount(await getOrCreateAccount(candidate));
-    const { allowed } = canSendEmail(fresh.warmupStatus, fresh.dailySendCount, fresh.warmupStartedAt, fresh.lastSentAt);
+    const { allowed } = canSendEmail(fresh.warmupStatus, fresh.dailySendCount, fresh.activeSendDays, fresh.lastSentAt);
     if (allowed) return candidate;
   }
 
@@ -90,18 +90,24 @@ export async function checkAccountCapacity(
   accountIndex: EmailAccountIndex
 ): Promise<{ allowed: boolean; reason?: string }> {
   const fresh = await withFreshDailyCount(await getOrCreateAccount(accountIndex));
-  return canSendEmail(fresh.warmupStatus, fresh.dailySendCount, fresh.warmupStartedAt, fresh.lastSentAt);
+  return canSendEmail(fresh.warmupStatus, fresh.dailySendCount, fresh.activeSendDays, fresh.lastSentAt);
 }
 
-/** Records a real send against an account: bumps its daily count, starts its warm-up clock on first-ever send, stamps lastSentAt for spacing. */
+/** Records a real send against an account: bumps its daily count, advances the warm-up ramp on the day's first send, stamps lastSentAt for spacing. */
 export async function recordEmailSent(accountIndex: EmailAccountIndex): Promise<void> {
   const fresh = await withFreshDailyCount(await getOrCreateAccount(accountIndex));
   const now = new Date();
+
+  // The ramp advances per *sending* day, so only the day's first send moves
+  // it — later sends the same day count toward the daily cap but not toward
+  // warm-up progress.
+  const newSendDay = startsNewSendDay(fresh.lastSentAt, now);
 
   await db
     .update(emailSendAccounts)
     .set({
       dailySendCount: fresh.dailySendCount + 1,
+      activeSendDays: fresh.activeSendDays + (newSendDay ? 1 : 0),
       lastSentAt: now,
       warmupStatus: fresh.warmupStatus === "not_started" ? "warming_up" : fresh.warmupStatus,
       warmupStartedAt: fresh.warmupStartedAt ?? now,

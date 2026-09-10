@@ -89,31 +89,49 @@ export function shouldResetDailyCounter(lastResetAt: Date | null | undefined): b
   return lastResetAt.getTime() < todayMidnight.getTime();
 }
 
-export function getWarmupPhase(startedAt: Date | null | undefined): {
-  daysSinceStart: number;
+/**
+ * The ramp position for a mailbox that has sent on `activeSendDays` distinct
+ * days (see email_send_accounts.active_send_days).
+ *
+ * Counts *sending* days, not elapsed calendar days. An idle mailbox builds
+ * no sender reputation, so it must not graduate to a higher cap — under the
+ * old calendar rule an account silent for three weeks would have been
+ * cleared for 35/day having sent almost nothing, which is the exact pattern
+ * warm-up exists to avoid.
+ *
+ * `activeSendDays` counts today once it has sent, so the tier is keyed off
+ * days *completed before* today (`activeSendDays - 1`). That preserves the
+ * original ramp's shape: the first four sending days allow 3/day, the fifth
+ * moves to 5/day, and so on.
+ */
+export function getWarmupPhase(activeSendDays: number | null | undefined): {
+  activeSendDays: number;
   dailyLimit: number;
 } {
-  if (!startedAt) {
-    return { daysSinceStart: 0, dailyLimit: WARMUP_RAMP[0].dailyLimit };
-  }
-
-  // Elapsed real time since a real timestamp — timezone-independent, so
-  // this compares against the actual current instant (`new Date()`), not a
-  // Winnipeg-shifted stand-in for it.
-  const daysSinceStart = Math.floor((Date.now() - startedAt.getTime()) / (1000 * 60 * 60 * 24));
+  const days = Math.max(0, activeSendDays ?? 0);
+  const completedDays = Math.max(0, days - 1);
 
   let dailyLimit = WARMUP_RAMP[0].dailyLimit;
   for (const tier of WARMUP_RAMP) {
-    if (daysSinceStart >= tier.fromDay) dailyLimit = tier.dailyLimit;
+    if (completedDays >= tier.fromDay) dailyLimit = tier.dailyLimit;
   }
 
-  return { daysSinceStart, dailyLimit };
+  return { activeSendDays: days, dailyLimit };
+}
+
+/**
+ * Whether a send landing at `at` is this mailbox's first of that Winnipeg
+ * day — i.e. whether it should push `active_send_days` up by one.
+ */
+export function startsNewSendDay(lastSentAt: Date | null | undefined, at: Date = new Date()): boolean {
+  if (!lastSentAt) return true;
+  return lastSentAt.getTime() < getTodayMidnightWinnipeg(at).getTime();
 }
 
 export function canSendEmail(
   warmupStatus: string,
   dailySendCount: number,
-  warmupStartedAt: Date | null | undefined,
+  activeSendDays: number | null | undefined,
   lastSentAt?: Date | null
 ): { allowed: boolean; reason?: string } {
   if (warmupStatus !== "ready" && warmupStatus !== "warming_up" && warmupStatus !== "not_started") {
@@ -134,7 +152,11 @@ export function canSendEmail(
     return { allowed: true };
   }
 
-  const { dailyLimit } = getWarmupPhase(warmupStartedAt);
+  // A mailbox that hasn't sent today is on its first send of a new sending
+  // day, which will take active_send_days up by one — so the cap it's held
+  // to is the one for that upcoming day, not the finished one.
+  const effectiveDays = (activeSendDays ?? 0) + (startsNewSendDay(lastSentAt) ? 1 : 0);
+  const { dailyLimit } = getWarmupPhase(effectiveDays);
 
   if (dailySendCount >= dailyLimit) {
     return {
@@ -146,8 +168,7 @@ export function canSendEmail(
   return { allowed: true };
 }
 
-export function isWarmupComplete(warmupStartedAt: Date | null | undefined): boolean {
-  if (!warmupStartedAt) return false;
-  const { daysSinceStart } = getWarmupPhase(warmupStartedAt);
-  return daysSinceStart >= WARMUP_TOTAL_RAMP_DAYS;
+/** Complete once the mailbox has actually sent on WARMUP_TOTAL_RAMP_DAYS distinct days. */
+export function isWarmupComplete(activeSendDays: number | null | undefined): boolean {
+  return (activeSendDays ?? 0) >= WARMUP_TOTAL_RAMP_DAYS;
 }
