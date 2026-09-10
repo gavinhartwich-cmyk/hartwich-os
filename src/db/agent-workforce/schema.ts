@@ -155,6 +155,8 @@ export const managerEscalations = pgTable("manager_escalations", {
   action: text("action").notNull(),
   diagnosis: text("diagnosis").notNull(),
   whyApprovalRequired: text("why_approval_required").notNull(),
+  /** Forecast status when raised — lets a worse situation cut a settled escalation's cooldown short. */
+  forecastStatus: text("forecast_status"),
   expectedImpact: numeric("expected_impact"),
   risk: numeric("risk"),
   status: escalationStatusEnum("status").notNull().default("pending"),

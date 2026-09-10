@@ -13,13 +13,20 @@ export default async function ReviewQueuePage({
   searchParams: Promise<{ runId?: string }>;
 }) {
   const { runId } = await searchParams;
-  const companies = await listCompaniesByStatus("qualified");
+  // Only leads still awaiting a decision. This used to list "qualified",
+  // which meant every lead already promoted to the board stayed here
+  // forever — 23 of them by 2026-09-10 — because promoteCompanyToBoard
+  // sets status to "qualified" and creates the deal, so acting on a lead
+  // never removed it from its own queue. Deciding either way (board or
+  // disqualify) now takes it off this page, which is the whole point of a
+  // queue.
+  const companies = await listCompaniesByStatus("needs_review");
 
   return (
     <div>
       <PageHeader
-        title="Qualified Leads"
-        subtitle={`${companies.length} lead${companies.length === 1 ? "" : "s"} ready to reach out to`}
+        title="Review Queue"
+        subtitle={`${companies.length} lead${companies.length === 1 ? "" : "s"} waiting on your decision`}
         action={
           <Link href="/leads/find" className="btn-primary">
             + Find Leads
@@ -31,7 +38,11 @@ export default async function ReviewQueuePage({
 
       {companies.length === 0 ? (
         <p className="surface-card border-dashed p-6 text-sm text-[var(--muted)]">
-          No qualified leads yet — find leads to get started.
+          Nothing waiting on you — every lead has been moved to the board or disqualified.{" "}
+          <Link href="/board" className="text-white underline underline-offset-2 hover:text-white/80">
+            Go to the board
+          </Link>{" "}
+          or find more leads.
         </p>
       ) : (
         <ul className="space-y-3">
