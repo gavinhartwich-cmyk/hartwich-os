@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
-import { getCompanyById, updateCompany, websiteDomain } from "@/lib/data/companies";
+import { deleteCompany, getCompanyById, updateCompany, websiteDomain } from "@/lib/data/companies";
 import { createDeal } from "@/lib/data/deals";
 import {
   createContact,
@@ -44,6 +44,19 @@ export async function updateCompanyAction(formData: FormData) {
   revalidatePath(`/companies/${id}`);
   revalidatePath("/companies");
   revalidatePath("/board");
+}
+
+export async function deleteCompanyAction(formData: FormData) {
+  const user = await getCurrentAppUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const companyId = z.string().uuid().parse(formData.get("companyId"));
+  await deleteCompany(companyId);
+  revalidatePath("/companies");
+  revalidatePath("/board");
+  redirect("/companies");
 }
 
 export async function createDealAction(formData: FormData) {

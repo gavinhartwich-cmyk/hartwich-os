@@ -14,6 +14,7 @@ import ContactsPanel from "./contacts-panel";
 import ActivityPanel from "./activity-panel";
 import OutreachPanel from "./outreach-panel";
 import EmailHistoryPanel from "./email-history-panel";
+import DeleteCompanyButton from "./delete-company-button";
 import { createDealAction, updateCompanyAction } from "./actions";
 
 const OWNER_LOOKUP_MESSAGES: Record<string, { tone: "ok" | "muted"; text: string }> = {
@@ -53,7 +54,12 @@ export default async function CompanyDetailPage({
       <PageHeader
         title={company.name}
         back={{ href: "/companies", label: "Companies" }}
-        action={<StatusBadge status={company.status} />}
+        action={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={company.status} />
+            <DeleteCompanyButton companyId={company.id} companyName={company.name} />
+          </div>
+        }
       />
 
       <div className="grid gap-8 md:grid-cols-[1fr_260px]">

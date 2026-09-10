@@ -110,6 +110,19 @@ export async function updateCompany(id: string, input: Partial<CompanyInput>) {
   return company;
 }
 
+/**
+ * Permanently deletes a company and everything under it — contacts, deals,
+ * activities, email_drafts, and tasks all cascade via their FK
+ * (onDelete: "cascade" on companyId, see schema.ts); any booking that
+ * pointed at this company has its companyId set null instead of being
+ * deleted (onDelete: "set null") so the booking record itself survives.
+ * Irreversible — the company detail page gates this behind a confirmation
+ * before ever calling it.
+ */
+export async function deleteCompany(id: string) {
+  await db.delete(companies).where(eq(companies.id, id));
+}
+
 // ---------------------------------------------------------------------------
 // Lead mining (Phase 2, architecture doc §5) — dedup, discovery persistence,
 // and the review-queue actions.
