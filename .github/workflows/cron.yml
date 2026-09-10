@@ -2,8 +2,16 @@ name: Cron jobs
 
 # Replaces the two Zo background loop scripts (scripts/sync-replies-loop.sh,
 # scripts/send-booking-reminders-loop.sh) now that the app runs on Vercel —
-# see MIGRATION.md. Each job just pings one of this app's own bearer-secret
+# see MIGRATION.md. Each step just pings one of this app's own bearer-secret
 # cron routes; the actual work happens server-side.
+#
+# One job, four sequential steps — not four separate jobs. GitHub Actions
+# bills every job a minimum of 1 minute regardless of how little it
+# actually does, so 4 jobs x every 15 min was ~384 billed minutes/day
+# (~11.5k/month) against a 2,000/month free private-repo allowance, for
+# curl calls that each take a couple of seconds. One job cuts that ~4x.
+# `continue-on-error: true` on every step keeps the original behavior:
+# one route failing doesn't block the others from still running.
 #
 # Requires two repo secrets (Settings -> Secrets and variables -> Actions):
 #   HARTWICH_APP_URL — the live Vercel URL, no trailing slash.
@@ -15,37 +23,33 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  sync-replies:
+  cron:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Sync Gmail replies
+        continue-on-error: true
         run: |
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/sync-replies" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
 
-  send-reminders:
-    runs-on: ubuntu-latest
-    steps:
       - name: Send booking reminders
+        continue-on-error: true
         run: |
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-reminders" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
 
-  send-queued-emails:
-    runs-on: ubuntu-latest
-    steps:
       - name: Flush warm-up-queued outreach emails
+        continue-on-error: true
         run: |
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/send-queued-emails" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
 
-  email-cadence:
-    runs-on: ubuntu-latest
-    steps:
       - name: Run follow-up cadence (v1.1 — 3/6/9-day no-reply nudges)
+        continue-on-error: true
         run: |
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/email-cadence" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
