@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { Suspense, useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { useSearchParams } from "next/navigation";
+import { signIn, type SignInState } from "./actions";
 import FormField from "@/components/form-field";
 import AmbientOrb from "@/components/ambient-orb";
 
@@ -27,43 +28,28 @@ function LoginError() {
   return null;
 }
 
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="btn-primary w-full">
+      {pending ? "Signing in…" : "Sign in"}
+    </button>
+  );
+}
+
+const INITIAL_STATE: SignInState = { error: null };
+
 function LoginForm() {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
-    const formData = new FormData(e.currentTarget);
-    const email = String(formData.get("email") ?? "");
-    const password = String(formData.get("password") ?? "");
-
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (signInError) {
-      setError("Incorrect email or password.");
-      setSubmitting(false);
-      return;
-    }
-
-    router.push("/");
-    router.refresh();
-  }
+  const [state, formAction] = useActionState(signIn, INITIAL_STATE);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 text-left">
+    <form action={formAction} className="space-y-3 text-left">
       <FormField label="Email" name="email" type="email" required autoFocus />
       <FormField label="Password" name="password" type="password" required />
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {state.error && <p className="text-sm text-red-400">{state.error}</p>}
 
-      <button type="submit" disabled={submitting} className="btn-primary w-full">
-        {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      <SubmitButton />
     </form>
   );
 }
