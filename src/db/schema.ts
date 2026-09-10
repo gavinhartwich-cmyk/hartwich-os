@@ -661,3 +661,19 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
   contact: one(contacts, { fields: [bookings.contactId], references: [contacts.id] }),
   deal: one(deals, { fields: [bookings.dealId], references: [deals.id] }),
 }));
+
+// ---------------------------------------------------------------------------
+// api_rate_limits — a lightweight Postgres-backed limiter for the
+// unauthenticated public routes (/api/public/booking/*), so a request
+// count is shared across serverless instances instead of living in one
+// invocation's memory. Reuses the existing database rather than adding a
+// new service (Upstash/Vercel KV) for what only needs to block spam, not
+// serve high QPS — see src/lib/rate-limit.ts.
+// ---------------------------------------------------------------------------
+
+export const apiRateLimits = pgTable("api_rate_limits", {
+  /** e.g. "booking:203.0.113.4" — route family + client IP. */
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull().default(1),
+});
