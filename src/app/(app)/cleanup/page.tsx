@@ -11,8 +11,23 @@ type Stats = {
   total: number;
 };
 
+type AccountWarmupStatus = {
+  accountIndex: 0 | 1 | 2;
+  fromAddress: string | null;
+  warmupStatus: string;
+  daysSinceStart: number;
+  dailyLimit: number | null;
+  sentToday: number;
+  lastSentAt: string | null;
+  complete: boolean;
+  configured: boolean;
+};
+
+const WARMUP_TOTAL_RAMP_DAYS = 29;
+
 export default function CleanupPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [warmup, setWarmup] = useState<AccountWarmupStatus[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [cleaning, setCleaning] = useState(false);
   const [done, setDone] = useState(false);
@@ -22,6 +37,7 @@ export default function CleanupPage() {
 
   useEffect(() => {
     fetchStats();
+    fetchWarmup();
   }, []);
 
   async function fetchStats() {
@@ -33,6 +49,16 @@ export default function CleanupPage() {
       console.error("Failed to fetch stats:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchWarmup() {
+    try {
+      const res = await fetch("/api/cleanup/warmup");
+      const data = await res.json();
+      setWarmup(data.accounts);
+    } catch (error) {
+      console.error("Failed to fetch warm-up status:", error);
     }
   }
 
@@ -121,6 +147,57 @@ export default function CleanupPage() {
             )}
           </button>
           {stagesMessage && <p className="mt-3 text-sm text-white/70">{stagesMessage}</p>}
+        </div>
+
+        {/* Email warm-up */}
+        <div className="surface-card mb-6 p-6">
+          <h2 className="font-semibold text-white">Email warm-up</h2>
+          <p className="mt-1 text-sm text-white/70">
+            Per-account sending ramp — a fresh Gmail account is deliberately capped well below
+            Gmail&apos;s own limit while it builds sender reputation. See src/lib/warmup/schedule.ts
+            for the exact ramp.
+          </p>
+          {!warmup ? (
+            <p className="mt-4 text-sm text-white/50">Loading…</p>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {warmup.map((a) => {
+                const dayLabel = a.complete
+                  ? "Warmed up"
+                  : `Day ${a.daysSinceStart} of ${WARMUP_TOTAL_RAMP_DAYS}`;
+                const limitLabel = a.dailyLimit === null ? "no daily cap" : `${a.dailyLimit}/day`;
+                const progressPct = a.complete
+                  ? 100
+                  : Math.min(100, Math.round((a.daysSinceStart / WARMUP_TOTAL_RAMP_DAYS) * 100));
+                return (
+                  <div key={a.accountIndex} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="truncate text-sm font-medium text-white">
+                      {a.fromAddress ?? `Account ${a.accountIndex + 1}`}
+                    </p>
+                    {!a.configured && (
+                      <p className="mt-1 text-xs text-red-400">GMAIL_REFRESH_TOKEN not set</p>
+                    )}
+                    <p className="mt-2 text-xs text-white/50">{dayLabel}</p>
+                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={`h-full rounded-full ${a.complete ? "bg-emerald-400" : "bg-sky-400"}`}
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-sm text-white/80">
+                      {a.sentToday} sent today
+                      <span className="text-white/40"> · {limitLabel}</span>
+                    </p>
+                    {a.lastSentAt && (
+                      <p className="mt-1 text-xs text-white/40">
+                        Last sent {new Date(a.lastSentAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {!done ? (
