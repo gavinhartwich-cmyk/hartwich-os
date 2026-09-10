@@ -7,6 +7,7 @@ import {
   agentRuns,
   experiments,
   managerDecisions,
+  managerEscalations,
   outreachControl,
   salesForecasts,
   salesGoals,
@@ -341,5 +342,66 @@ export async function listRecentForecasts(limit = 20): Promise<ForecastSnapshot[
     projectedFinal: Number(r.projectedFinal),
     probability: r.probability,
     status: r.status,
+  }));
+}
+
+export type PendingEscalation = {
+  id: string;
+  goalMetric: string;
+  capability: string;
+  proposedChangePercent: number | null;
+  action: string;
+  diagnosis: string;
+  whyApprovalRequired: string;
+  expectedImpact: number | null;
+  risk: number | null;
+  createdAt: Date;
+};
+
+/**
+ * Decisions the Sales Manager is waiting on Gavin for. Rendered on
+ * /ai-workforce with Approve/Reject — approving flips the row's status and
+ * ai-workforce's own manager carries it out on its next cycle.
+ */
+export async function listPendingEscalations(limit = 20): Promise<PendingEscalation[]> {
+  const agentDb = getAgentDb();
+  const rows = await agentDb
+    .select({
+      id: managerEscalations.id,
+      goalId: managerEscalations.goalId,
+      capability: managerEscalations.capability,
+      proposedChangePercent: managerEscalations.proposedChangePercent,
+      action: managerEscalations.action,
+      diagnosis: managerEscalations.diagnosis,
+      whyApprovalRequired: managerEscalations.whyApprovalRequired,
+      expectedImpact: managerEscalations.expectedImpact,
+      risk: managerEscalations.risk,
+      createdAt: managerEscalations.createdAt,
+    })
+    .from(managerEscalations)
+    .where(eq(managerEscalations.status, "pending"))
+    .orderBy(desc(managerEscalations.createdAt))
+    .limit(limit);
+  if (rows.length === 0) return [];
+
+  const goalIds = [...new Set(rows.map((r) => r.goalId))];
+  const goals = await agentDb
+    .select({ id: salesGoals.id, metric: salesGoals.metric })
+    .from(salesGoals)
+    .where(inArray(salesGoals.id, goalIds));
+  const metricByGoal = new Map(goals.map((g) => [g.id, g.metric]));
+
+  return rows.map((r) => ({
+    id: r.id,
+    goalMetric: metricByGoal.get(r.goalId) ?? "unknown",
+    capability: r.capability,
+    proposedChangePercent: r.proposedChangePercent,
+    action: r.action,
+    diagnosis: r.diagnosis,
+    whyApprovalRequired: r.whyApprovalRequired,
+    // numeric comes back as a string from postgres.js — coerce explicitly.
+    expectedImpact: r.expectedImpact === null ? null : Number(r.expectedImpact),
+    risk: r.risk === null ? null : Number(r.risk),
+    createdAt: r.createdAt,
   }));
 }
