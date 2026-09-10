@@ -5,6 +5,7 @@ import PageHeader from "@/components/page-header";
 import Reveal from "@/components/reveal";
 import HubDiagram, { type HubNode, type NodeStatus } from "@/components/ai-workforce/hub-diagram";
 import KillSwitch from "@/components/ai-workforce/kill-switch";
+import { EscalationPanel } from "@/components/ai-workforce/escalation-panel";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import { isBookingAdmin } from "@/lib/auth/allowlist";
 import { isAgentDbConfigured } from "@/db/agent-workforce/client";
@@ -21,6 +22,7 @@ import {
   listActiveGoalsWithForecast,
   listRecentAiActivity,
   listRecentManagerDecisions,
+  listPendingEscalations,
   listRunningExperiments,
   type CapabilityStatus,
 } from "@/lib/data/ai-workforce";
@@ -77,6 +79,7 @@ export default async function AiWorkforcePage() {
         listRecentManagerDecisions(8),
         listRunningExperiments(),
         getSuppressedCount(),
+        listPendingEscalations(),
       ])
     : null;
 
@@ -91,7 +94,8 @@ export default async function AiWorkforcePage() {
     decisions,
     runningExperiments,
     suppressedCount,
-  ] = agentData ?? [null, null, null, null, null, null, [], [], [], 0];
+    pendingEscalations,
+  ] = agentData ?? [null, null, null, null, null, null, [], [], [], 0, []];
 
   const nodes: HubNode[] = [
     {
@@ -181,6 +185,10 @@ export default async function AiWorkforcePage() {
           </div>
         </div>
       )}
+
+      {/* Above the diagram deliberately: an unanswered escalation means the
+          Sales Manager is stuck waiting, which matters more than status. */}
+      <EscalationPanel escalations={pendingEscalations} />
 
       <Reveal>
         <HubDiagram hub={{ label: "AI WORKFORCE", sublabel: hubSublabel, status: hubStatus }} nodes={nodes} />

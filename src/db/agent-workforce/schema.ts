@@ -125,3 +125,45 @@ export const suppressedContacts = pgTable("suppressed_contacts", {
   reason: text("reason").notNull(),
   suppressedAt: timestamp("suppressed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const escalationStatusEnum = pgEnum("escalation_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "executed",
+  "failed",
+]);
+
+/**
+ * Decisions the Sales Manager wants to make but isn't allowed to make alone
+ * (its authority policy caps e.g. a discovery volume change at +20%).
+ *
+ * The SECOND deliberate write exception, alongside outreach_control: this
+ * app sets `status` to approved/rejected and ai-workforce's manager carries
+ * approved ones out on its next cycle. Before this table existed, escalating
+ * only emailed Gavin and filed a task — neither of which can execute
+ * anything — so the manager re-raised the identical decision every cycle and
+ * he had no way to ever say yes.
+ */
+export const managerEscalations = pgTable("manager_escalations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  goalId: uuid("goal_id")
+    .notNull()
+    .references(() => salesGoals.id, { onDelete: "cascade" }),
+  capability: text("capability").notNull(),
+  proposedChangePercent: integer("proposed_change_percent"),
+  action: text("action").notNull(),
+  diagnosis: text("diagnosis").notNull(),
+  whyApprovalRequired: text("why_approval_required").notNull(),
+  expectedImpact: numeric("expected_impact"),
+  risk: numeric("risk"),
+  status: escalationStatusEnum("status").notNull().default("pending"),
+  executionNote: text("execution_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  executedAt: timestamp("executed_at", { withTimezone: true }),
+});
+
+export const managerEscalationsRelations = relations(managerEscalations, ({ one }) => ({
+  goal: one(salesGoals, { fields: [managerEscalations.goalId], references: [salesGoals.id] }),
+}));
