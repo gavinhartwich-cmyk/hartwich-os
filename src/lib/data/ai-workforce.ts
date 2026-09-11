@@ -180,9 +180,23 @@ export type ManagerDecisionSummary = {
   reason: string;
   createdAt: Date;
   isEscalation: boolean;
+  /** How many consecutive cycles reached this same decision, including this one. */
+  repeatCount: number;
+  /** When the run of identical decisions began — `createdAt` is the most recent. */
+  firstAt: Date;
 };
 
-/** The Sales Manager's own institutional memory (ai-workforce's manager_decisions) — "what did it decide, and why," most recent first. */
+/**
+ * The Sales Manager's own institutional memory (ai-workforce's
+ * manager_decisions) — "what did it decide, and why," most recent first.
+ *
+ * Consecutive identical decisions are collapsed into one entry with a count.
+ * The manager runs every 15 minutes, so a situation it can't act on alone
+ * produces the same decision ~96 times a day; showing them individually
+ * filled the whole list with one repeated line and buried everything else,
+ * which read as if it were escalating over and over (Gavin, 2026-09-11).
+ * The rows are all still in the table — this is a display concern only.
+ */
 export async function listRecentManagerDecisions(limit = 8): Promise<ManagerDecisionSummary[]> {
   const agentDb = getAgentDb();
   const rows = await agentDb
@@ -195,21 +209,37 @@ export async function listRecentManagerDecisions(limit = 8): Promise<ManagerDeci
     })
     .from(managerDecisions)
     .orderBy(desc(managerDecisions.createdAt))
-    .limit(limit);
+    // Over-fetch so collapsing still yields `limit` distinct entries when a
+    // long run of identical decisions sits at the top.
+    .limit(limit * 40);
   if (rows.length === 0) return [];
 
   const goalIds = [...new Set(rows.map((r) => r.goalId))];
   const goals = await agentDb.select({ id: salesGoals.id, metric: salesGoals.metric }).from(salesGoals).where(inArray(salesGoals.id, goalIds));
   const metricByGoal = new Map(goals.map((g) => [g.id, g.metric]));
 
-  return rows.map((r) => ({
-    id: r.id,
-    goalMetric: metricByGoal.get(r.goalId) ?? "unknown",
-    selectedAction: r.selectedAction,
-    reason: r.reason,
-    createdAt: r.createdAt,
-    isEscalation: r.selectedAction.startsWith("Escalate to Gavin"),
-  }));
+  const collapsed: ManagerDecisionSummary[] = [];
+  for (const r of rows) {
+    const previous = collapsed[collapsed.length - 1];
+    // Rows arrive newest-first, so a run of identical decisions is contiguous.
+    if (previous && previous.selectedAction === r.selectedAction && previous.goalMetric === metricByGoal.get(r.goalId)) {
+      previous.repeatCount += 1;
+      previous.firstAt = r.createdAt;
+      continue;
+    }
+    if (collapsed.length === limit) break;
+    collapsed.push({
+      id: r.id,
+      goalMetric: metricByGoal.get(r.goalId) ?? "unknown",
+      selectedAction: r.selectedAction,
+      reason: r.reason,
+      createdAt: r.createdAt,
+      isEscalation: r.selectedAction.startsWith("Escalate to Gavin"),
+      repeatCount: 1,
+      firstAt: r.createdAt,
+    });
+  }
+  return collapsed;
 }
 
 export async function listRunningExperiments() {
