@@ -37,7 +37,15 @@ export const CAPABILITY_AGENT_IDS = {
     "qualification_agent",
     "company_review_agent",
   ],
-  outreach: ["outreach_strategy_agent", "outreach_generation_agent", "outreach_followup_agent"],
+  // outreach_strategy_agent and outreach_generation_agent were merged into
+  // outreach_composer_agent (2026-09-11). Retired ids stay listed so the
+  // node's history survives the merge — see the note on discovery above.
+  outreach: [
+    "outreach_composer_agent",
+    "outreach_strategy_agent",
+    "outreach_generation_agent",
+    "outreach_followup_agent",
+  ],
   conversations: ["conversation_intelligence_agent", "outreach_reply_agent", "appointment_agent"],
 } as const;
 
