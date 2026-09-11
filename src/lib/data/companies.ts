@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, ilike, ne, and, notInArray } from "drizzle-orm";
+import { asc, desc, eq, ilike, ne, and, or, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, deals, pipelineStages, contacts } from "@/db/schema";
 import type { CompanyEnrichment } from "@/lib/ai/enrich-company";
@@ -359,9 +359,48 @@ export async function listCompaniesByStatus(status: "needs_review" | "qualified"
   });
 }
 
-/** Review-queue "Move to board" action — qualifies the lead and creates its first deal. */
+/**
+ * Review-queue "Move to board" action — qualifies the lead and creates its
+ * first deal, or returns the one it already has.
+ *
+ * The guard is the point. This said "creates its first deal" but inserted
+ * unconditionally, and until 2026-09-11 the review queue kept listing
+ * already-promoted companies with a live "Move to board" button — so
+ * pressing it twice produced a second card for the same company. Five
+ * companies ended up with two or three deals each, and the extras looked
+ * un-actioned in New Lead while the company's one real outreach sat against
+ * a sibling deal in Contacted.
+ *
+ * Won and lost deals don't count as open: a company that was closed out and
+ * is genuinely being worked again should get a fresh card.
+ */
 export async function promoteCompanyToBoard(companyId: string, ownerUserId: string) {
   return db.transaction(async (tx) => {
+    const closedStageIds = (
+      await tx
+        .select({ id: pipelineStages.id })
+        .from(pipelineStages)
+        .where(or(eq(pipelineStages.isWon, true), eq(pipelineStages.isLost, true)))
+    ).map((s) => s.id);
+
+    const [existing] = await tx
+      .select()
+      .from(deals)
+      .where(
+        and(
+          eq(deals.companyId, companyId),
+          ...(closedStageIds.length > 0 ? [notInArray(deals.stageId, closedStageIds)] : [])
+        )
+      )
+      .limit(1);
+
+    await tx
+      .update(companies)
+      .set({ status: "qualified", updatedAt: new Date() })
+      .where(eq(companies.id, companyId));
+
+    if (existing) return existing;
+
     const [firstStage] = await tx
       .select()
       .from(pipelineStages)
@@ -370,11 +409,6 @@ export async function promoteCompanyToBoard(companyId: string, ownerUserId: stri
     if (!firstStage) {
       throw new Error("No pipeline stages exist yet — run `npm run db:seed`.");
     }
-
-    await tx
-      .update(companies)
-      .set({ status: "qualified", updatedAt: new Date() })
-      .where(eq(companies.id, companyId));
 
     const [deal] = await tx
       .insert(deals)
