@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, ilike, ne, and } from "drizzle-orm";
+import { asc, desc, eq, ilike, ne, and, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, deals, pipelineStages, contacts } from "@/db/schema";
 import type { CompanyEnrichment } from "@/lib/ai/enrich-company";
@@ -384,16 +384,52 @@ export async function promoteCompanyToBoard(companyId: string, ownerUserId: stri
   });
 }
 
-/** Review-queue "Disqualify" action. */
+/**
+ * Review-queue "Disqualify" action — also closes any deal the company still
+ * has open.
+ *
+ * This used to only flip the company's status, leaving the deal in whatever
+ * active column it was in, so the board kept showing cards for leads that
+ * had already been rejected (4 of them on 2026-09-10 — two in "New Lead",
+ * two in "Contacted"). Rejecting a lead in one place and still being asked
+ * to look at it in another is the bug.
+ *
+ * Deals move to the Lost stage rather than being deleted: for anything
+ * already contacted, that outreach history is the reason we don't email them
+ * again, and Lost is the column that exists for this. A deal already in a
+ * won stage is left alone — that combination means someone made a mistake,
+ * and silently closing a won deal is the more damaging guess.
+ */
 export async function disqualifyCompany(companyId: string, reason?: string) {
-  const [company] = await db
-    .update(companies)
-    .set({
-      status: "disqualified",
-      disqualifyReason: reason || "Manually disqualified from review queue.",
-      updatedAt: new Date(),
-    })
-    .where(eq(companies.id, companyId))
-    .returning();
-  return company;
+  return db.transaction(async (tx) => {
+    const [company] = await tx
+      .update(companies)
+      .set({
+        status: "disqualified",
+        disqualifyReason: reason || "Manually disqualified from review queue.",
+        updatedAt: new Date(),
+      })
+      .where(eq(companies.id, companyId))
+      .returning();
+
+    const [lostStage] = await tx.select().from(pipelineStages).where(eq(pipelineStages.isLost, true)).limit(1);
+    if (lostStage) {
+      const wonStageIds = (
+        await tx.select({ id: pipelineStages.id }).from(pipelineStages).where(eq(pipelineStages.isWon, true))
+      ).map((s) => s.id);
+
+      await tx
+        .update(deals)
+        .set({ stageId: lostStage.id, stageEnteredAt: new Date() })
+        .where(
+          and(
+            eq(deals.companyId, companyId),
+            ne(deals.stageId, lostStage.id),
+            ...(wonStageIds.length > 0 ? [notInArray(deals.stageId, wonStageIds)] : [])
+          )
+        );
+    }
+
+    return company;
+  });
 }

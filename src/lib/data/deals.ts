@@ -27,6 +27,14 @@ export type DealOutreach = { state: OutreachState; at: Date | null };
  * One aggregate query for the whole board rather than a lookup per card —
  * this runs on every board render.
  *
+ * Matched on the COMPANY, not `activities.deal_id`. A third of outbound
+ * activities have no deal_id set (8 of 23 on 2026-09-10) — the sender only
+ * records one when the deal already existed at send time — so joining on it
+ * made real outreach invisible and put "Not contacted" on four cards sitting
+ * in the Contacted column that had genuinely been emailed. company_id is
+ * always set. The tradeoff: a company with two deals shows the same outreach
+ * on both, which is a far smaller error than claiming no one was contacted.
+ *
  * "Replied" requires an inbound activity that has a real `messages` row
  * behind it. An inbound activity on its own is NOT a reply: the bounce
  * handler writes inbound activities too ("Original email to X bounced.
@@ -46,15 +54,15 @@ async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
     last_bounced_at: string | null;
   }>(sql`
     select
-      a.deal_id,
+      d.id as deal_id,
       max(a.occurred_at) filter (where a.direction = 'outbound') as last_outbound_at,
       max(a.occurred_at) filter (where a.direction = 'inbound' and m.id is not null) as last_inbound_at,
       max(a.occurred_at) filter (where m.status = 'delivered')   as last_delivered_at,
       max(a.occurred_at) filter (where m.status = 'bounced')     as last_bounced_at
-    from activities a
+    from deals d
+    join activities a on a.company_id = d.company_id
     left join messages m on m.activity_id = a.id
-    where a.deal_id is not null
-    group by a.deal_id
+    group by d.id
   `);
 
   const byDeal = new Map<string, DealOutreach>();
