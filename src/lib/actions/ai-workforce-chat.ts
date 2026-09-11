@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
 import { isBookingAdmin } from "@/lib/auth/allowlist";
 import { db } from "@/db";
@@ -75,6 +75,27 @@ export async function confirmGoalProposal(messageId: string): Promise<void> {
   const periodEnd = new Date(periodStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
 
   const agentDb = getAgentDb();
+
+  // The chat's prompt asks the model to flag an existing goal rather than
+  // propose a duplicate, but nothing enforced it — so a second identical
+  // new_clients goal was created (2026-09-11 01:59) alongside one from the
+  // day before. The Sales Manager runs a cycle per goal, so duplicates make
+  // it diagnose the same bottleneck twice and raise two identical
+  // escalations, which is exactly what landed in front of Gavin. A prompt is
+  // not a constraint; this is.
+  const [existing] = await agentDb
+    .select({ id: salesGoals.id, target: salesGoals.target, periodEnd: salesGoals.periodEnd })
+    .from(salesGoals)
+    .where(and(eq(salesGoals.metric, metric), notInArray(salesGoals.status, ["ACHIEVED", "FAILED"])))
+    .limit(1);
+
+  if (existing) {
+    throw new Error(
+      `There's already an active "${metric}" goal (target ${existing.target}, ends ${existing.periodEnd.toISOString().slice(0, 10)}). ` +
+        `Two goals on one metric make the Sales Manager work the same problem twice and escalate it twice — adjust that goal instead of adding another.`
+    );
+  }
+
   await agentDb.insert(salesGoals).values({
     metric,
     target: target.toString(),
