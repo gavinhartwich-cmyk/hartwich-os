@@ -24,7 +24,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * sides either way).
  */
 export const CAPABILITY_AGENT_IDS = {
-  discovery: ["prospect_discovery_agent", "research_agent", "qualification_agent", "company_review_agent"],
+  // research_agent and qualification_agent were merged into
+  // prospect_assessment_agent (2026-09-11) to stop paying to restate the
+  // research back to the model as the second call's input. The retired ids
+  // stay listed: agent_runs still holds their history, and dropping them
+  // would make the Discovery node's "last active" and 24h counts forget
+  // everything that ran before the merge.
+  discovery: [
+    "prospect_discovery_agent",
+    "prospect_assessment_agent",
+    "research_agent",
+    "qualification_agent",
+    "company_review_agent",
+  ],
   outreach: ["outreach_strategy_agent", "outreach_generation_agent", "outreach_followup_agent"],
   conversations: ["conversation_intelligence_agent", "outreach_reply_agent", "appointment_agent"],
 } as const;
