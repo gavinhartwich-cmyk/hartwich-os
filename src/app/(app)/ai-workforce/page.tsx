@@ -259,6 +259,11 @@ export default async function AiWorkforcePage() {
                     <span className="text-[11px] text-[var(--muted)]">{relativeTime(d.createdAt)}</span>
                   </div>
                   <p className="mt-0.5 text-sm text-white/80">{d.selectedAction}</p>
+                  {d.repeatCount > 1 && (
+                    <p className="mt-0.5 text-[11px] text-white/30">
+                      Same decision on {d.repeatCount} consecutive cycles, since {relativeTime(d.firstAt)}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
