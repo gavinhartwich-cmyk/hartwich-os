@@ -47,17 +47,28 @@ export async function POST(request: NextRequest) {
     // added, or two drafts approved in quick succession before either one
     // updated its status. excludeDraftId so approving *this* draft doesn't
     // trip over itself.
-    const recentOther = await findRecentOutreach(draft.contactId, draft.id);
-    if (recentOther) {
-      return NextResponse.json(
-        {
-          error:
-            recentOther.status === "approved"
-              ? "This contact already has another outreach email queued to send."
-              : `This contact was already emailed on ${recentOther.sentAt!.toLocaleDateString()} (within the last ${DUPLICATE_OUTREACH_WINDOW_DAYS} days).`,
-        },
-        { status: 409 }
-      );
+    //
+    // Cold outreach ONLY. The guard exists to stop a second introduction
+    // going to someone already introduced to — and a follow-up, a reply and
+    // a bounce correction are all, by definition, to a contact who has
+    // already been emailed. Running it on those blocked every follow-up
+    // approval with "already emailed within the last 14 days", which is
+    // precisely the situation a follow-up exists for. Follow-up timing is
+    // the cadence's job (src/lib/emails/cadence.ts), not this guard's
+    // (Gavin, 2026-09-11).
+    if (draft.kind === "cold_outreach") {
+      const recentOther = await findRecentOutreach(draft.contactId, draft.id);
+      if (recentOther) {
+        return NextResponse.json(
+          {
+            error:
+              recentOther.status === "approved"
+                ? "This contact already has another outreach email queued to send."
+                : `This contact was already emailed on ${recentOther.sentAt!.toLocaleDateString()} (within the last ${DUPLICATE_OUTREACH_WINDOW_DAYS} days).`,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // Final subject/body — the edited version if the reviewer changed
