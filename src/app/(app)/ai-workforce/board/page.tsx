@@ -3,12 +3,20 @@ import { listPipelineStages } from "@/lib/data/pipeline-stages";
 import { listDealsForBoard } from "@/lib/data/deals";
 import { listPendingEmailDrafts } from "@/lib/data/email-drafts";
 import { getCurrentAppUser } from "@/lib/auth/current-user";
-import Board from "./board";
+import Board from "../../board/board";
 
-export default async function BoardPage() {
+/**
+ * The same Kanban board component as /board, filtered to companies the AI
+ * Workforce discovered on its own (company.aiWorkforceCreated) — split
+ * into its own view so the two didn't sit crammed into one column set
+ * (Gavin, 2026-09-15: "too cluttered"). Nothing is deduped or merged
+ * between the two boards; a company can still be worked by both, this
+ * only decides which view it renders in.
+ */
+export default async function AiWorkforceBoardPage() {
   const [stages, deals, emailDrafts, currentUser] = await Promise.all([
     listPipelineStages(),
-    listDealsForBoard("manual"),
+    listDealsForBoard("ai"),
     listPendingEmailDrafts(),
     getCurrentAppUser(),
   ]);
@@ -17,18 +25,21 @@ export default async function BoardPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-light tracking-tight text-white">Pipeline</h1>
+          <Link
+            href="/ai-workforce"
+            className="mb-2 inline-flex items-center gap-1 text-sm text-[var(--muted)] hover:text-white"
+          >
+            ← AI Workforce
+          </Link>
+          <h1 className="text-xl font-light tracking-tight text-white">AI Board</h1>
           <p className="text-sm text-[var(--muted)]">
-            Drag a card to move it between stages. Manually-found leads — see{" "}
-            <Link href="/ai-workforce/board" className="underline hover:text-white">
-              the AI board
+            Companies the AI Workforce found and is working on its own — see{" "}
+            <Link href="/board" className="underline hover:text-white">
+              the main pipeline
             </Link>{" "}
-            for what the AI Workforce discovered on its own.
+            for manually-found leads.
           </p>
         </div>
-        <Link href="/companies/new" className="btn-primary">
-          + New Company
-        </Link>
       </div>
 
       {stages.length === 0 ? (

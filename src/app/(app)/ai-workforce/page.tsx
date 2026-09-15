@@ -165,9 +165,14 @@ export default async function AiWorkforcePage() {
         title="AI Workforce"
         subtitle="Hartwich Labs' autonomous sales workforce — discovery, outreach, conversations, CRM upkeep, analysis, and the Sales Manager loop that ties them together."
         action={
-          <Link href="/ai-workforce/chat" className="btn-primary">
-            Talk to the Sales Manager
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/ai-workforce/board" className="btn-secondary">
+              View the AI board
+            </Link>
+            <Link href="/ai-workforce/chat" className="btn-primary">
+              Talk to the Sales Manager
+            </Link>
+          </div>
         }
       />
 

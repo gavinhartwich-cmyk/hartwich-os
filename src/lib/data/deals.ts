@@ -36,14 +36,17 @@ export type DealOutreach = { state: OutreachState; at: Date | null };
  * on both, which is a far smaller error than claiming no one was contacted.
  *
  * "Replied" requires an inbound activity that has a real `messages` row
- * behind it. An inbound activity on its own is NOT a reply: the bounce
- * handler writes inbound activities too ("Original email to X bounced.
- * Re-ran website research but found no other contact address — needs
- * manual research"), and on 2026-09-10 every single inbound activity in
- * the database was one of those. Counting them as replies labelled two
- * bounced deals "Replied — this one needs you", which is the opposite of
- * the truth and exactly the wasted click this badge exists to prevent.
- * Only a reply synced from Gmail creates a message row.
+ * behind it AND isn't itself from a bounce address. Two known bounce
+ * shapes turned out NOT to be a reply: hartwich-os's own bounce handler
+ * writes an inbound activity with no `messages` row at all ("Original
+ * email to X bounced..."), and — found 2026-09-15 — ai-workforce's own
+ * reply pipeline was, until then, recording a genuine Gmail
+ * mailer-daemon/postmaster delivery-failure notification as a real
+ * inbound activity WITH a real message row (from_address literally
+ * `mailer-daemon@...`), because it had no bounce detection of its own.
+ * One thread got "replied" from the same bounce 27 times over 6 days.
+ * Both shapes are excluded here now; only a reply synced from Gmail from
+ * an actual person creates the kind of message row this counts.
  */
 async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
   const rows = await db.execute<{
@@ -56,7 +59,11 @@ async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
     select
       d.id as deal_id,
       max(a.occurred_at) filter (where a.direction = 'outbound') as last_outbound_at,
-      max(a.occurred_at) filter (where a.direction = 'inbound' and m.id is not null) as last_inbound_at,
+      max(a.occurred_at) filter (
+        where a.direction = 'inbound' and m.id is not null
+          and lower(coalesce(m.from_address, '')) not like 'mailer-daemon@%'
+          and lower(coalesce(m.from_address, '')) not like 'postmaster@%'
+      ) as last_inbound_at,
       max(a.occurred_at) filter (where m.status = 'delivered')   as last_delivered_at,
       max(a.occurred_at) filter (where m.status = 'bounced')     as last_bounced_at
     from deals d
@@ -101,7 +108,7 @@ async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
  * follow-up clears the flag and resets stageEnteredAt (send-approved-draft.ts),
  * which is what sends it back to the bottom afterward.
  */
-export async function listDealsForBoard() {
+export async function listDealsForBoard(source: "ai" | "manual" | "all" = "all") {
   const [rows, outreachByDeal] = await Promise.all([
     db.query.deals.findMany({
       with: {
@@ -118,7 +125,19 @@ export async function listDealsForBoard() {
     getOutreachByDeal(),
   ]);
 
-  return rows.map((deal) => ({
+  // Filtered in JS, not SQL — the board is small enough (a few hundred
+  // rows) that a second query or an exists-subquery buys nothing, and
+  // this keeps the one query above as the only source of truth for what
+  // "the board" means. "ai"/"manual" split by company.aiWorkforceCreated
+  // (Gavin, 2026-09-15: same board mixing autonomous and human-found
+  // leads together was "too cluttered") — a company can be worked by
+  // both regardless of which one discovered it (see AI badge on
+  // deal-card.tsx), this only controls which of the two board VIEWS a
+  // deal shows up in, never merges or dedupes anything.
+  const filtered =
+    source === "all" ? rows : rows.filter((d) => (source === "ai" ? d.company.aiWorkforceCreated : !d.company.aiWorkforceCreated));
+
+  return filtered.map((deal) => ({
     ...deal,
     outreach: outreachByDeal.get(deal.id) ?? ({ state: "none", at: null } as DealOutreach),
   }));
