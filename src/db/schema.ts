@@ -598,6 +598,45 @@ export const bookings = pgTable("bookings", {
 });
 
 // ---------------------------------------------------------------------------
+// linkedin_contacts / linkedin_contact_events — LinkedIn outreach, tracked
+// separately from the board on purpose (Gavin: mixing manual, no-API
+// LinkedIn messaging into the deal pipeline would make the board messy).
+// There's no LinkedIn send integration here at all — pasting a profile URL
+// IS the record of having sent the first message (adding a contact writes
+// its first event in the same transaction, occurredAt = now); every
+// follow-up after that is still sent by hand on LinkedIn itself and logged
+// back here manually. This app's only job is remembering who's due for one
+// and getting you to their profile in one click — see
+// src/lib/linkedin/cadence.ts for what "due" means.
+// ---------------------------------------------------------------------------
+
+export const linkedinContacts = pgTable("linkedin_contacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  linkedinUrl: text("linkedin_url").notNull().unique(),
+  name: text("name"),
+  companyName: text("company_name"),
+  notes: text("notes"),
+  // false = archived — stop reminding (they replied elsewhere, said no,
+  // etc.) without losing the history. Never deleted just for going quiet.
+  active: boolean("active").notNull().default(true),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const linkedinContactEvents = pgTable("linkedin_contact_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => linkedinContacts.id, { onDelete: "cascade" }),
+  // When the message was actually sent on LinkedIn — defaults to "now" for
+  // the common case (logging it right after sending), but editable so a
+  // follow-up sent yesterday and logged today doesn't skew the cadence.
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // audit_log — who (or which AI run) changed what
 // ---------------------------------------------------------------------------
 
@@ -610,6 +649,14 @@ export const auditLog = pgTable("audit_log", {
   diff: jsonb("diff").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const linkedinContactsRelations = relations(linkedinContacts, ({ many }) => ({
+  events: many(linkedinContactEvents),
+}));
+
+export const linkedinContactEventsRelations = relations(linkedinContactEvents, ({ one }) => ({
+  contact: one(linkedinContacts, { fields: [linkedinContactEvents.contactId], references: [linkedinContacts.id] }),
+}));
 
 // ---------------------------------------------------------------------------
 // Relations (for typed nested reads via Drizzle's query API)
