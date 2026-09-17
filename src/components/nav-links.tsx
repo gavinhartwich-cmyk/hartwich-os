@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/board", label: "Board" },
   { href: "/calendar", label: "Calendar" },
   { href: "/companies", label: "Companies" },
+  { href: "/linkedin", label: "LinkedIn" },
   { href: "/leads/review", label: "Review Queue" },
   { href: "/cleanup", label: "Cleanup" },
 ];
