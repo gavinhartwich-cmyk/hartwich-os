@@ -9,6 +9,24 @@ import { getLinkedInContact } from "@/lib/data/linkedin-contacts";
 import { relativeDay } from "@/lib/linkedin/format";
 import { deleteEventAction, logFollowUpAction, updateContactAction } from "./actions";
 
+const STATUS_LABELS: Record<string, string> = {
+  not_contacted: "Not contacted",
+  waiting_for_reply: "Waiting for reply",
+  replied: "Replied",
+  meeting_booked: "Meeting booked",
+  not_interested: "Not interested",
+  no_response: "No response",
+};
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  message_sent: "Message sent",
+  follow_up_sent: "Follow-up sent",
+  reply_received: "Reply received",
+  meeting_booked: "Meeting booked",
+  not_interested: "Not interested",
+  no_response: "No response",
+};
+
 export default async function LinkedInContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const contact = await getLinkedInContact(id);
@@ -30,6 +48,10 @@ export default async function LinkedInContactPage({ params }: { params: Promise<
         }
       />
 
+      <p className="mb-4 text-sm text-[var(--muted)]">
+        Status: <span className="text-white/80">{STATUS_LABELS[contact.status]}</span>
+      </p>
+
       {contact.followUpDue && (
         <p className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm text-amber-300">
           Follow-up due {contact.nextFollowUpDueAt ? relativeDay(contact.nextFollowUpDueAt) : ""} — send it on LinkedIn, then log it below.
@@ -42,13 +64,34 @@ export default async function LinkedInContactPage({ params }: { params: Promise<
       )}
 
       <div className="surface-card mb-6 p-4">
-        <p className="mb-3 text-sm font-medium text-white/90">Log a follow-up</p>
-        <form action={logFollowUpAction} className="flex gap-2">
+        <p className="mb-3 text-sm font-medium text-white/90">Log activity</p>
+        <form action={logFollowUpAction} className="space-y-3">
           <input type="hidden" name="contactId" value={contact.id} />
-          <input type="text" name="note" placeholder="What did you say? (optional)" className="input-field flex-1" />
-          <button type="submit" className="btn-primary shrink-0">
-            Log now
-          </button>
+          <div className="flex gap-2">
+            <select name="type" defaultValue="follow_up_sent" className="input-field w-auto">
+              <option value="message_sent">Message sent</option>
+              <option value="follow_up_sent">Follow-up sent</option>
+              <option value="reply_received">Reply received</option>
+              <option value="meeting_booked">Meeting booked</option>
+              <option value="not_interested">Not interested</option>
+              <option value="no_response">No response</option>
+            </select>
+            <input
+              type="datetime-local"
+              name="occurredAt"
+              className="input-field w-auto"
+              title="When this happened — leave blank for now"
+            />
+          </div>
+          <div className="flex gap-2">
+            <input type="text" name="note" placeholder="Notes (optional)" className="input-field flex-1" />
+            <button type="submit" className="btn-primary shrink-0">
+              Log
+            </button>
+          </div>
+          <p className="text-xs text-[var(--muted)]">
+            Logging a reply, meeting, or &ldquo;not interested&rdquo; stops future follow-up reminders for this contact.
+          </p>
         </form>
       </div>
 
@@ -78,7 +121,9 @@ export default async function LinkedInContactPage({ params }: { params: Promise<
         {contact.events.map((event) => (
           <li key={event.id} className="surface-card flex items-center justify-between gap-3 p-3">
             <div className="min-w-0">
-              <p className="text-sm text-white/80">{relativeDay(event.occurredAt)}</p>
+              <p className="text-sm text-white/80">
+                {EVENT_TYPE_LABELS[event.type] ?? event.type} · {relativeDay(event.occurredAt)}
+              </p>
               {event.note && <p className="truncate text-xs text-[var(--muted)]">{event.note}</p>}
             </div>
             <form action={deleteEventAction}>
