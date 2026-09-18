@@ -35,11 +35,11 @@ export async function addLinkedInContactAction(formData: FormData) {
   redirect("/linkedin?added=1");
 }
 
-/** Called directly from the due-list's "Mark followed up" button (a client component, like board's moveDealAction) — not a form, no note. */
+/** Called directly from the due-list's "Mark followed up" button (a client component, like board's moveDealAction) — not a form, no note. Always a routine follow-up; logging a reply/meeting/not-interested needs the richer form on the contact's own page, since those change the status, not just the cadence clock. */
 export async function markFollowedUpAction(contactId: string) {
   const user = await getCurrentAppUser();
   if (!user) throw new Error("Not signed in.");
 
-  await logLinkedInFollowUp(contactId);
+  await logLinkedInFollowUp(contactId, "follow_up_sent");
   revalidatePath("/linkedin");
 }

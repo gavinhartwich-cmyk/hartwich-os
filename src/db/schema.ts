@@ -623,6 +623,22 @@ export const linkedinContacts = pgTable("linkedin_contacts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// 2026-09-17: every event used to be undifferentiated (a timestamp + an
+// optional free-text note), so the cadence engine had no way to tell "I
+// sent a follow-up" from "they replied" — logging a reply still left the
+// contact due for another follow-up in 7 days. `type` lets a reply,
+// meeting, or "not interested" actually stop the cadence (see
+// src/lib/linkedin/cadence.ts's TERMINAL_EVENT_TYPES) instead of just
+// being a note attached to what looked like just another follow-up.
+export const linkedinEventTypeEnum = pgEnum("linkedin_event_type", [
+  "message_sent",
+  "follow_up_sent",
+  "reply_received",
+  "meeting_booked",
+  "not_interested",
+  "no_response",
+]);
+
 export const linkedinContactEvents = pgTable("linkedin_contact_events", {
   id: uuid("id").defaultRandom().primaryKey(),
   contactId: uuid("contact_id")
@@ -632,6 +648,11 @@ export const linkedinContactEvents = pgTable("linkedin_contact_events", {
   // the common case (logging it right after sending), but editable so a
   // follow-up sent yesterday and logged today doesn't skew the cadence.
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  // Existing rows predate this column and default to "follow_up_sent" —
+  // an honest guess (most logged events were follow-ups), not a claim
+  // that every past row was literally one; only what happens going
+  // forward needs to be accurate for the cadence fix to work.
+  type: linkedinEventTypeEnum("type").notNull().default("follow_up_sent"),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

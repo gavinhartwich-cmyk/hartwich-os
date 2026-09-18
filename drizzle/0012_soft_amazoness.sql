@@ -1,0 +1,2 @@
+CREATE TYPE "public"."linkedin_event_type" AS ENUM('message_sent', 'follow_up_sent', 'reply_received', 'meeting_booked', 'not_interested', 'no_response');--> statement-breakpoint
+ALTER TABLE "linkedin_contact_events" ADD COLUMN "type" "linkedin_event_type" DEFAULT 'follow_up_sent' NOT NULL;

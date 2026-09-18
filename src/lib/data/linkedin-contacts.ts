@@ -2,11 +2,11 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { linkedinContacts, linkedinContactEvents } from "@/db/schema";
-import { isFollowUpDue, nextFollowUpDueAt } from "@/lib/linkedin/cadence";
+import { deriveLinkedInStatus, isFollowUpDue, nextFollowUpDueAt, type LinkedInEventType } from "@/lib/linkedin/cadence";
 
 export type LinkedInContactSummary = Awaited<ReturnType<typeof listLinkedInContacts>>[number];
 
-/** Every contact with its history, plus the two things the list page actually needs to decide what to show first. */
+/** Every contact with its history, plus the things the list page actually needs to decide what to show first. */
 export async function listLinkedInContacts() {
   const rows = await db.query.linkedinContacts.findMany({
     with: { events: { orderBy: (e, { asc }) => asc(e.occurredAt) } },
@@ -18,6 +18,7 @@ export async function listLinkedInContacts() {
     lastContactedAt: contact.events.at(-1)?.occurredAt ?? null,
     nextFollowUpDueAt: nextFollowUpDueAt(contact.events),
     followUpDue: contact.active && isFollowUpDue(contact.events),
+    status: deriveLinkedInStatus(contact.events),
   }));
 }
 
@@ -27,10 +28,12 @@ export async function getLinkedInContact(id: string) {
     with: { events: { orderBy: (e, { desc }) => desc(e.occurredAt) } },
   });
   if (!row) return null;
+  const chronological = [...row.events].reverse();
   return {
     ...row,
-    nextFollowUpDueAt: nextFollowUpDueAt([...row.events].reverse()),
-    followUpDue: row.active && isFollowUpDue([...row.events].reverse()),
+    nextFollowUpDueAt: nextFollowUpDueAt(chronological),
+    followUpDue: row.active && isFollowUpDue(chronological),
+    status: deriveLinkedInStatus(chronological),
   };
 }
 
@@ -55,13 +58,20 @@ export async function addLinkedInContact(input: AddLinkedInContactInput, userId:
       })
       .returning();
 
-    await tx.insert(linkedinContactEvents).values({ contactId: contact.id, note: "Initial message sent" });
+    await tx
+      .insert(linkedinContactEvents)
+      .values({ contactId: contact.id, type: "message_sent", note: "Initial message sent" });
     return contact;
   });
 }
 
-export async function logLinkedInFollowUp(contactId: string, note?: string | null, occurredAt?: Date) {
-  await db.insert(linkedinContactEvents).values({ contactId, note: note || null, occurredAt: occurredAt ?? new Date() });
+export async function logLinkedInFollowUp(
+  contactId: string,
+  type: LinkedInEventType,
+  note?: string | null,
+  occurredAt?: Date
+) {
+  await db.insert(linkedinContactEvents).values({ contactId, type, note: note || null, occurredAt: occurredAt ?? new Date() });
 }
 
 export async function deleteLinkedInEvent(eventId: string) {
