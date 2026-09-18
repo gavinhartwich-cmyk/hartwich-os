@@ -36,18 +36,34 @@ export type DealOutreach = { state: OutreachState; at: Date | null };
  * on both, which is a far smaller error than claiming no one was contacted.
  *
  * "Replied" requires an inbound activity that has a real `messages` row
- * behind it AND isn't itself from a bounce address. Two known bounce
- * shapes turned out NOT to be a reply: hartwich-os's own bounce handler
- * writes an inbound activity with no `messages` row at all ("Original
- * email to X bounced..."), and — found 2026-09-15 — ai-workforce's own
- * reply pipeline was, until then, recording a genuine Gmail
- * mailer-daemon/postmaster delivery-failure notification as a real
+ * behind it AND isn't itself from a bounce address or subject. Two known
+ * bounce shapes turned out NOT to be a reply: hartwich-os's own bounce
+ * handler writes an inbound activity with no `messages` row at all
+ * ("Original email to X bounced..."), and — found 2026-09-15 —
+ * ai-workforce's own reply pipeline was, until then, recording a genuine
+ * Gmail mailer-daemon/postmaster delivery-failure notification as a real
  * inbound activity WITH a real message row (from_address literally
  * `mailer-daemon@...`), because it had no bounce detection of its own.
  * One thread got "replied" from the same bounce 27 times over 6 days.
- * Both shapes are excluded here now; only a reply synced from Gmail from
- * an actual person creates the kind of message row this counts.
+ *
+ * 2026-09-17: excluding only `mailer-daemon@`/`postmaster@` caught that
+ * one exact bounce and then missed the next one, which came from neither
+ * address (an Exchange/Outlook-style DSN uses an arbitrary system
+ * mailbox, not those two names) — same root cause, same fix as
+ * ai-workforce's own src/outreach/bounce-detection.ts and this app's
+ * src/lib/emails/sync-replies.ts: a short list of exact sender names is
+ * always one name behind whatever the next bounce uses, so this now also
+ * excludes by subject wording (kept in sync with those two files' own
+ * BOUNCE_SUBJECT_RE, translated to a Postgres regex below), not just the
+ * sender address.
  */
+const BOUNCE_ADDRESS_RE = "^(mailer-daemon|mailer_daemon|mail-daemon|postmaster)@";
+// Same word-root pattern as ai-workforce's BOUNCE_SUBJECT_RE / this app's
+// isBounceNotification (src/lib/emails/sync-replies.ts) — deliberately
+// kept in sync across all three rather than re-derived.
+const BOUNCE_SUBJECT_RE =
+  "delivery status notification|undeliver(ed|able)|delivery.{0,15}(fail|incomplete|problem|error)|(fail|reject|block).{0,15}(deliver|mail|message)|mail delivery failed|returned to sender|returned mail|failure notice|message (not delivered|rejected|blocked)|could not be delivered|couldnt be delivered|permanently fail";
+
 async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
   const rows = await db.execute<{
     deal_id: string;
@@ -61,8 +77,8 @@ async function getOutreachByDeal(): Promise<Map<string, DealOutreach>> {
       max(a.occurred_at) filter (where a.direction = 'outbound') as last_outbound_at,
       max(a.occurred_at) filter (
         where a.direction = 'inbound' and m.id is not null
-          and lower(coalesce(m.from_address, '')) not like 'mailer-daemon@%'
-          and lower(coalesce(m.from_address, '')) not like 'postmaster@%'
+          and lower(coalesce(m.from_address, '')) !~ ${BOUNCE_ADDRESS_RE}
+          and lower(coalesce(m.subject, '')) !~ ${BOUNCE_SUBJECT_RE}
       ) as last_inbound_at,
       max(a.occurred_at) filter (where m.status = 'delivered')   as last_delivered_at,
       max(a.occurred_at) filter (where m.status = 'bounced')     as last_bounced_at

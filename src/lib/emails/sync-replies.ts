@@ -28,26 +28,57 @@ export type SyncRepliesResult = {
 
 const BOUNCE_LOOKBACK_DAYS = 7;
 
+/**
+ * 2026-09-17: this used to be a list of literal subject phrases
+ * ("delivery status notification", "mail delivery failed", ...) plus an
+ * early return for anything that looked like a delay. Two real bugs came
+ * out of that: (1) a bounce whose MTA phrased the subject even slightly
+ * differently (e.g. Exchange/Outlook's "Undeliverable: ..." or "Delivery
+ * has failed to these recipients") matched nothing and fell straight
+ * through to being recorded as a genuine reply — a literal-phrase list is
+ * always one exact wording behind whatever the next bounce says; (2) the
+ * early `return false` for a delay notice meant this function reported
+ * "not a bounce" for a delay DSN, so the caller below never recognized it
+ * as a DSN at all and it also fell through as a genuine reply.
+ *
+ * BOUNCE_SUBJECT_RE is a single regex built from the handful of word
+ * roots every bounce notification's subject shares (deliver/undeliver/
+ * bounce/fail/reject/block/return, each within a short distance of the
+ * other) instead of a growing list of literal phrases. Kept in sync with
+ * ai-workforce's own src/outreach/bounce-detection.ts (a separate repo
+ * polling the same 3 mailboxes) — see that file's own comment for the
+ * same reasoning. The delay-vs-final split moved out of this function
+ * and into the caller (isTemporaryDelayNotice below): recognizing a delay
+ * notice AS a DSN (so it's never mistaken for a reply) is different from
+ * deciding not to act on it as a final failure yet.
+ */
+const BOUNCE_ADDRESS_PREFIXES = ["mailer-daemon@", "mailer_daemon@", "mail-daemon@", "postmaster@"];
+
+const BOUNCE_SUBJECT_RE =
+  /delivery status notification|undeliver(ed|able)|delivery.{0,15}(fail|incomplete|problem|error)|(fail|reject|block).{0,15}(deliver|mail|message)|mail delivery failed|returned to sender|returned mail|failure notice|message (not delivered|rejected|blocked)|could ?n'?t be delivered|permanently fail/;
+
 function isBounceNotification(fromAddress: string, subject: string | null): boolean {
   const from = fromAddress.toLowerCase();
   const s = (subject ?? "").toLowerCase();
 
-  // Gmail (and most MTAs) send a *temporary* delay notice from the exact
-  // same mailer-daemon address, with a subject nearly identical to a final
-  // failure ("Delivery Status Notification (Delay)" vs "(Failure)", or a
-  // bare "Delivery incomplete" that explicitly says it's still retrying) —
-  // treating that as a bounce flags the deal and re-searches for a
-  // "corrected" address the original send never actually needed.
-  if (/\bdelay(ed)?\b|incomplete|will retry|temporar(y|ily)/.test(s)) return false;
+  if (BOUNCE_ADDRESS_PREFIXES.some((prefix) => from.startsWith(prefix))) return true;
+  return BOUNCE_SUBJECT_RE.test(s);
+}
 
-  if (from.startsWith("mailer-daemon@") || from.startsWith("postmaster@")) return true;
-  return (
-    s.includes("delivery status notification") ||
-    s.includes("undelivered mail") ||
-    s.includes("delivery failure") ||
-    s.includes("mail delivery failed") ||
-    s.includes("returned to sender")
-  );
+/**
+ * A temporary "still retrying" notice, as opposed to a final failure.
+ * Gmail (and most MTAs) send this from the exact same mailer-daemon
+ * address, with a subject nearly identical to a final failure ("Delivery
+ * Status Notification (Delay)" vs "(Failure)", or a bare "Delivery
+ * incomplete" that explicitly says it's still retrying) — acting on it
+ * like a final bounce (flagging the deal, re-searching for a "corrected"
+ * address) would jump the gun on something Gmail itself hasn't given up
+ * on yet. Still recognized as a DSN by isBounceNotification above, just
+ * not acted on as a final failure — see the call site below.
+ */
+function isTemporaryDelayNotice(subject: string | null): boolean {
+  const s = (subject ?? "").toLowerCase();
+  return /\bdelay(ed)?\b|incomplete|will retry|temporar(y|ily)/.test(s);
 }
 
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
@@ -200,8 +231,15 @@ export async function syncReplies(): Promise<SyncRepliesResult> {
           const threadId = fullMsg.threadId ?? null;
 
           if (isBounceNotification(fromAddress, subjectHeader)) {
-            await handleBounceNotification(fullMsg);
-            bouncesFound++;
+            // A merely-temporary delay notice is still a DSN (never a
+            // genuine reply), but acting on it like a final failure — the
+            // whole point of handleBounceNotification, flagging the deal
+            // and re-searching for a "corrected" address — would jump the
+            // gun on something Gmail itself hasn't given up retrying yet.
+            if (!isTemporaryDelayNotice(subjectHeader)) {
+              await handleBounceNotification(fullMsg);
+              bouncesFound++;
+            }
             // Mark it read regardless of whether a match was found — either
             // way we've fully evaluated this notification; nothing left to
             // learn by re-fetching and re-scanning it again next run.
