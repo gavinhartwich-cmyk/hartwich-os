@@ -53,6 +53,7 @@ export default async function AiWorkforceBoardPage() {
           initialDeals={deals}
           emailDrafts={emailDrafts}
           currentUserId={currentUser?.id ?? ""}
+          users={[]}
         />
       )}
     </div>

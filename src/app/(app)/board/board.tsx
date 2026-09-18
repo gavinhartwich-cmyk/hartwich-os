@@ -15,15 +15,24 @@ export default function Board({
   initialDeals,
   emailDrafts,
   currentUserId,
+  users,
 }: {
   stages: PipelineStage[];
   initialDeals: BoardDeal[];
   emailDrafts: PendingEmailDraft[];
   currentUserId: string;
+  /** Who owns a deal, for the "just my stuff" / "just theirs" / "both" filter below — every allow-listed user, not just whoever's signed in. */
+  users: { id: string; name: string }[];
 }) {
   const [deals, setDeals] = useState(initialDeals);
   const [activeDeal, setActiveDeal] = useState<BoardDeal | null>(null);
   const [, startTransition] = useTransition();
+  // "all" shows every deal regardless of owner (including unowned ones) —
+  // a single filter over the one deals array, never a second query or a
+  // merge, so there's no way for this to produce a duplicate card.
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
+
+  const visibleDeals = ownerFilter === "all" ? deals : deals.filter((d) => d.ownerUserId === ownerFilter);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -58,7 +67,7 @@ export default function Board({
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [stages, deals, emailDrafts]);
+  }, [stages, visibleDeals, emailDrafts]);
 
   function syncContentFromTopBar() {
     if (contentScrollRef.current && topScrollRef.current) {
@@ -103,33 +112,55 @@ export default function Board({
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div
-        ref={topScrollRef}
-        onScroll={syncContentFromTopBar}
-        className="mb-1 h-3 overflow-x-auto overflow-y-hidden"
-      >
-        <div style={{ width: contentWidth, height: 1 }} />
-      </div>
-      <div
-        ref={contentScrollRef}
-        onScroll={syncTopBarFromContent}
-        className="flex gap-4 overflow-x-auto pb-4"
-      >
-        {emailDrafts.length > 0 && (
-          <EmailReviewColumn drafts={emailDrafts} currentUserId={currentUserId} />
-        )}
-        {stages.map((stage) => (
-          <Column key={stage.id} stage={stage} deals={deals.filter((d) => d.stageId === stage.id)} />
-        ))}
-      </div>
-      <DragOverlay>
-        {activeDeal ? (
-          <div className="rotate-2 scale-105 opacity-95 drop-shadow-2xl">
-            <DealCard deal={activeDeal} />
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    <>
+      {users.length > 0 && (
+        <div className="mb-3 flex items-center gap-2">
+          <label htmlFor="owner-filter" className="text-sm text-[var(--muted)]">
+            Showing
+          </label>
+          <select
+            id="owner-filter"
+            value={ownerFilter}
+            onChange={(e) => setOwnerFilter(e.target.value)}
+            className="input-field w-auto"
+          >
+            <option value="all">Everyone</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.id === currentUserId ? `${u.name} (me)` : u.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div
+          ref={topScrollRef}
+          onScroll={syncContentFromTopBar}
+          className="mb-1 h-3 overflow-x-auto overflow-y-hidden"
+        >
+          <div style={{ width: contentWidth, height: 1 }} />
+        </div>
+        <div
+          ref={contentScrollRef}
+          onScroll={syncTopBarFromContent}
+          className="flex gap-4 overflow-x-auto pb-4"
+        >
+          {emailDrafts.length > 0 && (
+            <EmailReviewColumn drafts={emailDrafts} currentUserId={currentUserId} />
+          )}
+          {stages.map((stage) => (
+            <Column key={stage.id} stage={stage} deals={visibleDeals.filter((d) => d.stageId === stage.id)} />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeDeal ? (
+            <div className="rotate-2 scale-105 opacity-95 drop-shadow-2xl">
+              <DealCard deal={activeDeal} />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </>
   );
 }
