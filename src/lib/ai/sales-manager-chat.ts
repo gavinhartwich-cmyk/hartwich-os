@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/ai-workforce";
 import { isAgentDbConfigured } from "@/db/agent-workforce/client";
 import type { ChatMessage } from "@/lib/data/ai-workforce-chat";
+import { generateDailyReport, todayKey } from "@/lib/reports/daily-report";
 
 /** Kept in sync by hand with ai-workforce's own GoalMetric union
  * (ai-workforce/src/goals/types.ts) — every one of these already has a
@@ -71,9 +72,33 @@ const JSON_SCHEMA = {
   additionalProperties: false,
 };
 
+/**
+ * Today's effort report, in the Sales Manager's own words — hartwich-os's
+ * own database, so this is available whether or not AGENT_DATABASE_URL is
+ * connected. Lets Gavin ask "how are we doing today" or "why is the bounce
+ * rate up" in conversation and get an answer grounded in the exact same
+ * numbers as /reports, not a re-derived guess.
+ */
+async function buildTodayReportBlock(): Promise<string> {
+  const report = await generateDailyReport(todayKey());
+  const s = report.scorecard;
+  const peopleLine =
+    report.people.length === 0
+      ? "no users found"
+      : report.people.map((p) => `${p.name}: ${p.totalTouches} touches`).join(", ");
+  const attentionLine =
+    report.attention.length === 0
+      ? "nothing flagged"
+      : report.attention.map((a) => `[${a.severity}] ${a.title}`).join("; ");
+
+  return `Today so far (${report.date}, ${report.timezone}): ${s.newLeads} new leads, ${s.emailsOut} emails out (${s.replies} replies, ${s.bounces} bounced), ${s.meetingsBooked} meetings booked, ${s.dealsWon} deals won / ${s.dealsLost} lost. By person: ${peopleLine}. AI: ${report.ai.leadsDiscovered} leads discovered, ${report.ai.emailsSentAutonomously} sent autonomously, ${report.ai.runsFailed} failed runs. Attention required: ${attentionLine}.`;
+}
+
 async function buildContextBlock(): Promise<string> {
+  const todayBlock = await buildTodayReportBlock();
+
   if (!isAgentDbConfigured()) {
-    return "ai-workforce's own database (AGENT_DATABASE_URL) is not connected — no goal/decision data is available yet.";
+    return `${todayBlock}\n\nai-workforce's own database (AGENT_DATABASE_URL) is not connected — no goal/decision data is available yet.`;
   }
 
   const [goals, decisions, funnel] = await Promise.all([
@@ -99,7 +124,7 @@ async function buildContextBlock(): Promise<string> {
       ? "No decisions recorded yet."
       : decisions.map((d) => `- [${d.goalMetric}] ${d.selectedAction} — ${d.reason}`).join("\n");
 
-  return `Active goals:\n${goalsBlock}\n\nRecent Sales Manager decisions:\n${decisionsBlock}\n\nCurrent pipeline: ${funnel.prospects} prospects, ${funnel.qualified} qualified, ${funnel.contacted} contacted, ${funnel.engaged} engaged, ${funnel.won} won.`;
+  return `${todayBlock}\n\nActive goals:\n${goalsBlock}\n\nRecent Sales Manager decisions:\n${decisionsBlock}\n\nCurrent pipeline: ${funnel.prospects} prospects, ${funnel.qualified} qualified, ${funnel.contacted} contacted, ${funnel.engaged} engaged, ${funnel.won} won.`;
 }
 
 function buildSystemPrompt(context: string): string {

@@ -60,7 +60,13 @@ export async function logFollowUpAction(formData: FormData) {
   if (!parsed.success) return;
 
   const occurredAt = parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : undefined;
-  await logLinkedInFollowUp(parsed.data.contactId, parsed.data.type, parsed.data.note, occurredAt);
+  await logLinkedInFollowUp(
+    parsed.data.contactId,
+    parsed.data.type,
+    user.id,
+    parsed.data.note,
+    occurredAt
+  );
   revalidatePath(`/linkedin/${parsed.data.contactId}`);
   revalidatePath("/linkedin");
 }

@@ -54,3 +54,10 @@ jobs:
           curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/email-cadence" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Accept: application/json"
+
+      - name: Send daily effort report (no-op until 5pm, once per day)
+        continue-on-error: true
+        run: |
+          curl -sf -m 30 -X POST "${{ secrets.HARTWICH_APP_URL }}/api/cron/daily-report" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"

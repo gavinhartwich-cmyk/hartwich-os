@@ -654,6 +654,13 @@ export const linkedinContactEvents = pgTable("linkedin_contact_events", {
   // forward needs to be accurate for the cadence fix to work.
   type: linkedinEventTypeEnum("type").notNull().default("follow_up_sent"),
   note: text("note"),
+  // Who logged it. linkedin_contacts.createdBy only records who first added
+  // the contact, so without this every follow-up after that was unattributable
+  // — the daily effort report can't credit LinkedIn work to Gavin or Noah off
+  // the contact's original creator. Nullable because rows predating this
+  // column have no honest answer; the report counts those as unattributed
+  // rather than guessing.
+  createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -771,6 +778,19 @@ export const apiRateLimits = pgTable("api_rate_limits", {
   key: text("key").primaryKey(),
   windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
   count: integer("count").notNull().default(1),
+});
+
+// ---------------------------------------------------------------------------
+// daily_report_sends — idempotency guard for the 5pm effort-report email
+// (src/app/api/cron/daily-report/route.ts). The cron workflow polls every 15
+// minutes all day, every day — this row is what stops "the current hour is
+// 5pm" from sending the same day's report 4 times.
+// ---------------------------------------------------------------------------
+
+export const dailyReportSends = pgTable("daily_report_sends", {
+  /** The report's date key ("YYYY-MM-DD" in REPORT_TIMEZONE), not the send time. */
+  dateKey: text("date_key").primaryKey(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
