@@ -654,6 +654,13 @@ export const linkedinContactEvents = pgTable("linkedin_contact_events", {
   // forward needs to be accurate for the cadence fix to work.
   type: linkedinEventTypeEnum("type").notNull().default("follow_up_sent"),
   note: text("note"),
+  // Who logged it. linkedin_contacts.createdBy only records who first added
+  // the contact, so without this every follow-up after that was unattributable
+  // — the daily effort report can't credit LinkedIn work to Gavin or Noah off
+  // the contact's original creator. Nullable because rows predating this
+  // column have no honest answer; the report counts those as unattributed
+  // rather than guessing.
+  createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

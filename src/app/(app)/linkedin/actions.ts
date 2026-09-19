@@ -40,6 +40,6 @@ export async function markFollowedUpAction(contactId: string) {
   const user = await getCurrentAppUser();
   if (!user) throw new Error("Not signed in.");
 
-  await logLinkedInFollowUp(contactId, "follow_up_sent");
+  await logLinkedInFollowUp(contactId, "follow_up_sent", user.id);
   revalidatePath("/linkedin");
 }

@@ -60,7 +60,12 @@ export async function addLinkedInContact(input: AddLinkedInContactInput, userId:
 
     await tx
       .insert(linkedinContactEvents)
-      .values({ contactId: contact.id, type: "message_sent", note: "Initial message sent" });
+      .values({
+        contactId: contact.id,
+        type: "message_sent",
+        note: "Initial message sent",
+        createdBy: userId,
+      });
     return contact;
   });
 }
@@ -68,10 +73,17 @@ export async function addLinkedInContact(input: AddLinkedInContactInput, userId:
 export async function logLinkedInFollowUp(
   contactId: string,
   type: LinkedInEventType,
+  userId: string,
   note?: string | null,
   occurredAt?: Date
 ) {
-  await db.insert(linkedinContactEvents).values({ contactId, type, note: note || null, occurredAt: occurredAt ?? new Date() });
+  await db.insert(linkedinContactEvents).values({
+    contactId,
+    type,
+    note: note || null,
+    occurredAt: occurredAt ?? new Date(),
+    createdBy: userId,
+  });
 }
 
 export async function deleteLinkedInEvent(eventId: string) {
