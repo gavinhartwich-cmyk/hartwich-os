@@ -781,6 +781,19 @@ export const apiRateLimits = pgTable("api_rate_limits", {
 });
 
 // ---------------------------------------------------------------------------
+// daily_report_sends — idempotency guard for the 5pm effort-report email
+// (src/app/api/cron/daily-report/route.ts). The cron workflow polls every 15
+// minutes all day, every day — this row is what stops "the current hour is
+// 5pm" from sending the same day's report 4 times.
+// ---------------------------------------------------------------------------
+
+export const dailyReportSends = pgTable("daily_report_sends", {
+  /** The report's date key ("YYYY-MM-DD" in REPORT_TIMEZONE), not the send time. */
+  dateKey: text("date_key").primaryKey(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // ai_workforce_chat_messages — the conversation with the Sales Manager
 // (/ai-workforce/chat). This app's own table, not ai-workforce's — the
 // transcript is a UI-layer concern (like audit_log), not part of

@@ -112,6 +112,50 @@ function ratePct(numerator: number, denominator: number): number | null {
   return Math.round((numerator / denominator) * 1000) / 10;
 }
 
+/** Walks back from `dateKey` (exclusive) to the given number of prior weekdays. */
+function priorWeekdayKeys(dateKey: string, count: number, timeZone: string): string[] {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const keys: string[] = [];
+  let cursor = new Date(Date.UTC(y, m - 1, d, 12));
+  while (keys.length < count) {
+    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+    const key = localDateKey({ year: cursor.getUTCFullYear(), month: cursor.getUTCMonth() + 1, day: cursor.getUTCDate() });
+    const weekday = utcToLocalParts(dayBounds(key, timeZone).from, timeZone).weekday;
+    if (weekday !== 0 && weekday !== 6) keys.push(key);
+  }
+  return keys;
+}
+
+/**
+ * Trailing weekday baseline for outbound volume — a fixed "must send at
+ * least N" threshold can't tell a normally-quiet solo operation from one
+ * that's gone unusually quiet. Comparing to the last 5 weekdays' own average
+ * can, at the cost of a query per sample day; 5 is enough to smooth out a
+ * single unusually heavy or light day without going stale.
+ */
+async function trailingWeekdayAvgEmailsOut(dateKey: string, timeZone: string): Promise<number | null> {
+  const keys = priorWeekdayKeys(dateKey, 5, timeZone);
+  const counts = await Promise.all(
+    keys.map(async (key) => {
+      const { from, to } = dayBounds(key, timeZone);
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            gte(messages.createdAt, from),
+            lt(messages.createdAt, to),
+            eq(messages.provider, "gmail"),
+            isNotNull(messages.toAddress)
+          )
+        );
+      return row.count;
+    })
+  );
+  if (counts.length === 0) return null;
+  return counts.reduce((a, b) => a + b, 0) / counts.length;
+}
+
 export async function generateDailyReport(
   dateKey: string = todayKey(),
   timeZone = REPORT_TIMEZONE
@@ -287,6 +331,11 @@ export async function generateDailyReport(
     .from(linkedinContactEvents)
     .where(and(inRange(linkedinContactEvents.occurredAt), isNull(linkedinContactEvents.createdBy)));
 
+  const weekday = utcToLocalParts(from, timeZone).weekday;
+  const isWeekend = weekday === 0 || weekday === 6;
+  // Skip the baseline query entirely on a weekend report — nothing will use it.
+  const trailingAvgEmailsOut = isWeekend ? null : await trailingWeekdayAvgEmailsOut(dateKey, timeZone);
+
   const byUser = new Map<string, PersonEffort>(
     appUsers.map((u) => [
       u.id,
@@ -378,9 +427,6 @@ export async function generateDailyReport(
     costUsd: Math.round(aiRunRow[0].cost * 100) / 100,
   };
 
-  const weekday = utcToLocalParts(from, timeZone).weekday;
-  const isWeekend = weekday === 0 || weekday === 6;
-
   const report: DailyReport = {
     date: dateKey,
     timezone: timeZone,
@@ -402,6 +448,7 @@ export async function generateDailyReport(
     overdueTasks: overdueTaskRow[0].overdue,
     flaggedDeals: flaggedDealRow[0].flagged,
     linkedinFollowUpsDue: linkedinContacts.filter((c) => c.followUpDue).length,
+    trailingAvgEmailsOut,
   });
 
   return report;
@@ -412,6 +459,8 @@ type AttentionInputs = {
   overdueTasks: number;
   flaggedDeals: number;
   linkedinFollowUpsDue: number;
+  /** Average outbound volume over the last 5 weekdays; null on a weekend report or with no prior data. */
+  trailingAvgEmailsOut: number | null;
 };
 
 /**
@@ -432,6 +481,25 @@ export function buildAttentionItems(
       code: "no_outbound",
       title: "Nothing went out today",
       detail: "No outbound email was sent on a working day, by a person or by the AI.",
+    });
+  }
+
+  // A fixed floor can't tell "normally quiet" from "gone unusually quiet" —
+  // this compares against the account's own recent pace instead. Only fires
+  // above the no_outbound case (>0 sent) and only once the baseline itself
+  // is a real number worth trusting (>=5 to rule out one heavy fluke day
+  // inflating the average enough to mask a real drop).
+  if (
+    scorecard.emailsOut > 0 &&
+    inputs.trailingAvgEmailsOut !== null &&
+    inputs.trailingAvgEmailsOut >= 5 &&
+    scorecard.emailsOut < inputs.trailingAvgEmailsOut * 0.4
+  ) {
+    items.push({
+      severity: "medium",
+      code: "volume_drop",
+      title: `Outbound volume down sharply — ${scorecard.emailsOut} vs a ${Math.round(inputs.trailingAvgEmailsOut)}/day average`,
+      detail: "Sent well below the last 5 weekdays' typical pace. Could be a slow day, or something stuck (warm-up cap, a paused account, a broken cron).",
     });
   }
 
