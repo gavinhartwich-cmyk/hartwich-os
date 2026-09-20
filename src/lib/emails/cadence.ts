@@ -6,7 +6,6 @@ import { findStageByName, PIPELINE_STAGE_NAMES } from "@/lib/data/pipeline-stage
 import { draftFollowUpEmail } from "@/lib/ai/draft-outreach";
 import { notifyOps } from "@/lib/notifications/notify";
 import { companyUrl } from "@/lib/utils/app-url";
-import { allAccountsFullyWarm } from "@/lib/data/email-accounts";
 
 export type CadenceResult = {
   flagged: number;
@@ -46,10 +45,6 @@ export async function runEmailCadence(): Promise<CadenceResult> {
   if (!contactedStage) {
     return { flagged: 0, errors: ["No 'Contacted' pipeline stage found — run npm run db:seed."] };
   }
-
-  // Checked once up front, not per candidate — it's the same answer for
-  // every deal in this run and doesn't change mid-loop.
-  const fullyWarm = await allAccountsFullyWarm();
 
   const candidates = await db.query.deals.findMany({
     where: and(
@@ -100,21 +95,21 @@ export async function runEmailCadence(): Promise<CadenceResult> {
         yourCompany: "Hartwich Labs",
       });
 
-      // Once every sending account has earned full reputation, a routine
-      // follow-up no longer needs a human to read it before it goes out —
-      // same bar warm-up itself uses (Gavin, 2026-09-20): auto-approve
-      // instead of leaving it in the review queue. approvedBy stays null
-      // (nobody approved it); aiRunId is what credits the send to the AI
-      // team in the effort report and what send-queued-emails.ts checks to
-      // accept a null approvedBy.
+      // Always pending_review here, regardless of warm-up state — for a
+      // manually-sourced deal that's the only path (Gavin, 2026-09-20:
+      // "the manual stuff is still approved by us") and for an
+      // AI-workforce-sourced one, this is a queue the ai-workforce repo's
+      // Sales Manager now reviews and approves on its own once every
+      // sending account is fully warmed up (see that repo's
+      // src/manager/followup-approvals.ts) — hartwich-os itself no longer
+      // makes that call.
       await db.insert(emailDrafts).values({
         companyId: deal.companyId,
         contactId: lastOutbound.contact.id,
         dealId: deal.id,
         subject: draft.subject,
         body: draft.body,
-        status: fullyWarm ? "approved" : "pending_review",
-        approvedAt: fullyWarm ? new Date() : undefined,
+        status: "pending_review",
         kind: "follow_up",
         aiRunId: draft.aiRunId,
       });
@@ -123,14 +118,10 @@ export async function runEmailCadence(): Promise<CadenceResult> {
 
       const link = companyUrl(deal.companyId);
       await notifyOps(
-        `${deal.company.name}: follow-up ${followUpNumber} of ${FOLLOW_UP_MAX_COUNT} ${fullyWarm ? "auto-approved" : "ready"}`,
-        fullyWarm
-          ? `No reply yet from ${deal.company.name} (${daysSince(deal.lastOutboundEmailAt!).toFixed(1)} days since last send). ` +
-            `Follow-up #${followUpNumber} was auto-approved (every sending account is fully warmed up) and will go out once one has capacity.` +
-            (link ? `\n\n${link}` : "")
-          : `No reply yet from ${deal.company.name} (${daysSince(deal.lastOutboundEmailAt!).toFixed(1)} days since last send). ` +
-            `Follow-up #${followUpNumber} has been drafted and the deal moved to the top of Contacted for review.` +
-            (link ? `\n\n${link}` : "")
+        `${deal.company.name}: follow-up ${followUpNumber} of ${FOLLOW_UP_MAX_COUNT} ready`,
+        `No reply yet from ${deal.company.name} (${daysSince(deal.lastOutboundEmailAt!).toFixed(1)} days since last send). ` +
+          `Follow-up #${followUpNumber} has been drafted and the deal moved to the top of Contacted for review.` +
+          (link ? `\n\n${link}` : "")
       );
     } catch (err) {
       errors.push(`Deal ${deal.id}: ${err instanceof Error ? err.message : String(err)}`);
