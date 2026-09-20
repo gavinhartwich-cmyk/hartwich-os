@@ -54,9 +54,12 @@ export async function POST(request: NextRequest) {
       const accountIndex = await resolveAccountForDraft(draft);
       if (accountIndex === null) break; // every account capped right now — stop; next run picks up here
 
-      if (!draft.approvedBy) {
-        // Shouldn't happen (approve-and-send always sets it before this
-        // status is reachable) — skip rather than send with no attribution.
+      // Every human-approved draft has approvedBy set before reaching
+      // 'approved' status; a null one only happens for a follow-up the
+      // warm-up-gated auto-approval in cadence.ts approved on its own
+      // (always aiRunId-backed) — anything else with no approvedBy is
+      // unexpected and skipped rather than sent with no attribution.
+      if (!draft.approvedBy && !draft.aiRunId) {
         errors.push(`Draft ${draft.id} has no approvedBy — skipping`);
         continue;
       }

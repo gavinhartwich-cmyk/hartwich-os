@@ -33,7 +33,12 @@ export async function sendApprovedDraft(
   finalSubject: string,
   finalBody: string,
   accountIndex: EmailAccountIndex,
-  approvedByUserId: string
+  // null only for a draft the warm-up-gated auto-approval in cadence.ts
+  // approved on its own — no human to attribute it to. The activity's
+  // aiGenerated flag (below) is what credits this to the AI team in the
+  // effort report; createdBy stays empty rather than pointing at whichever
+  // person happened to be logged in when the cron ran.
+  approvedByUserId: string | null
 ): Promise<{ messageId: string; fromAddress: string; activityId: string }> {
   if (!draft.contact.email) {
     throw new Error("Contact has no email address");
@@ -71,7 +76,7 @@ export async function sendApprovedDraft(
       direction: "outbound",
       bodyText: finalBody,
       aiGenerated: !!draft.aiRunId,
-      createdBy: approvedByUserId,
+      createdBy: approvedByUserId ?? undefined,
     })
     .returning();
 

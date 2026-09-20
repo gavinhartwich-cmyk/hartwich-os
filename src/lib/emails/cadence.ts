@@ -95,6 +95,14 @@ export async function runEmailCadence(): Promise<CadenceResult> {
         yourCompany: "Hartwich Labs",
       });
 
+      // Always pending_review here, regardless of warm-up state — for a
+      // manually-sourced deal that's the only path (Gavin, 2026-09-20:
+      // "the manual stuff is still approved by us") and for an
+      // AI-workforce-sourced one, this is a queue the ai-workforce repo's
+      // Sales Manager now reviews and approves on its own once every
+      // sending account is fully warmed up (see that repo's
+      // src/manager/followup-approvals.ts) — hartwich-os itself no longer
+      // makes that call.
       await db.insert(emailDrafts).values({
         companyId: deal.companyId,
         contactId: lastOutbound.contact.id,

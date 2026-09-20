@@ -20,6 +20,7 @@ const LINKS = [
 // defensive-check pattern as (app)/calendar/settings/page.tsx.
 const BOOKING_ADMIN_LINK = { href: "/calendar/settings", label: "Booking" };
 const AI_WORKFORCE_LINK = { href: "/ai-workforce", label: "AI Workforce" };
+const EMAIL_ACCOUNTS_LINK = { href: "/settings/email-accounts", label: "Email Accounts" };
 
 export default function NavLinks({
   showBookingAdmin = false,
@@ -33,7 +34,7 @@ export default function NavLinks({
 }) {
   const pathname = usePathname();
   const links = showBookingAdmin
-    ? [...LINKS.slice(0, 4), AI_WORKFORCE_LINK, ...LINKS.slice(4), BOOKING_ADMIN_LINK]
+    ? [...LINKS.slice(0, 4), AI_WORKFORCE_LINK, ...LINKS.slice(4), BOOKING_ADMIN_LINK, EMAIL_ACCOUNTS_LINK]
     : LINKS;
 
   return (

@@ -525,6 +525,22 @@ export const emailSendAccounts = pgTable("email_send_accounts", {
    * three mailboxes, so their volume builds the same reputation.
    */
   activeSendDays: integer("active_send_days").notNull().default(0),
+
+  // --- OAuth credentials (replaces GMAIL_ACCESS_TOKEN_N/GMAIL_REFRESH_TOKEN_N
+  // env vars) — see src/app/api/auth/gmail/{authorize,callback}/route.ts.
+  // Minting these by hand via OAuth Playground and pasting them into Vercel
+  // was the actual cause of the recurring "tokens expired again": every
+  // manual re-authorization mints a brand-new refresh token against the same
+  // (client, account) pair, and Google silently retires the oldest one once
+  // more than 50 exist for that pair. A real connect flow mints a token
+  // exactly once per account and this app renews it forever after — no more
+  // manual re-minting, so nothing pushes that count up. Null until an
+  // account has been connected through that flow; getGmailClient falls back
+  // to the env vars until then, so nothing breaks mid-migration.
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

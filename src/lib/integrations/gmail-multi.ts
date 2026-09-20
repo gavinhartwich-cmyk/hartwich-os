@@ -1,28 +1,51 @@
 import "server-only";
 import crypto from "node:crypto";
 import { google } from "googleapis";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { emailSendAccounts } from "@/db/schema";
 import { getAppUrl } from "@/lib/utils/app-url";
 
 /**
  * Multi-account Gmail integration for sending outreach emails from 3 accounts.
- * 
- * Supports:
- * - GMAIL_ACCESS_TOKEN_1, GMAIL_ACCESS_TOKEN_2, GMAIL_ACCESS_TOKEN_3
- * - GMAIL_REFRESH_TOKEN_1, GMAIL_REFRESH_TOKEN_2, GMAIL_REFRESH_TOKEN_3
+ *
+ * Credentials come from email_send_accounts (accessToken/refreshToken —
+ * see src/app/api/auth/gmail/{authorize,callback}/route.ts for how an
+ * account gets connected) with a fallback to the legacy
+ * GMAIL_ACCESS_TOKEN_N/GMAIL_REFRESH_TOKEN_N env vars for any account not
+ * yet migrated to that flow. Once a token is refreshed (by this client,
+ * automatically, whenever the access token is stale) the new tokens are
+ * written back to the DB row — nothing here ever needs a human to
+ * re-mint and paste a token again.
+ *
+ * Also supports:
  * - Account rotation (round-robin load balancing)
  * - Reply detection across all accounts
  */
 
 export type EmailAccountIndex = 0 | 1 | 2;
 
+async function getStoredCredentials(
+  accountIndex: EmailAccountIndex
+): Promise<{ accessToken: string | null; refreshToken: string | null }> {
+  const row = await db.query.emailSendAccounts.findFirst({
+    where: eq(emailSendAccounts.accountIndex, accountIndex),
+    columns: { accessToken: true, refreshToken: true },
+  });
+  return {
+    accessToken: row?.accessToken ?? process.env[`GMAIL_ACCESS_TOKEN_${accountIndex + 1}`] ?? null,
+    refreshToken: row?.refreshToken ?? process.env[`GMAIL_REFRESH_TOKEN_${accountIndex + 1}`] ?? null,
+  };
+}
+
 // Initialize Gmail API client for a specific account
-function getGmailClient(accountIndex: EmailAccountIndex) {
-  const accessTokenKey = `GMAIL_ACCESS_TOKEN_${accountIndex + 1}`;
-  const refreshTokenKey = `GMAIL_REFRESH_TOKEN_${accountIndex + 1}`;
-  const accessToken = process.env[accessTokenKey];
+async function getGmailClient(accountIndex: EmailAccountIndex) {
+  const { accessToken, refreshToken } = await getStoredCredentials(accountIndex);
 
   if (!accessToken) {
-    throw new Error(`${accessTokenKey} not set in environment variables`);
+    throw new Error(
+      `No Gmail credentials for account ${accountIndex} — connect it at /settings/email-accounts.`
+    );
   }
 
   const auth = new google.auth.OAuth2(
@@ -30,9 +53,27 @@ function getGmailClient(accountIndex: EmailAccountIndex) {
     process.env.GMAIL_CLIENT_SECRET || ""
   );
 
-  auth.setCredentials({
-    access_token: accessToken,
-    refresh_token: process.env[refreshTokenKey],
+  auth.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
+
+  // Fires whenever the client mints a fresh access token (including a
+  // silent refresh mid-request) — persisting it here is what makes the
+  // stored credential self-renewing instead of a one-time snapshot that
+  // goes stale in an hour. Best-effort: a failed write here shouldn't fail
+  // the Gmail call that's already in flight, just cost one extra refresh
+  // next time.
+  auth.on("tokens", (tokens) => {
+    const update: { accessToken?: string; refreshToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
+      updatedAt: new Date(),
+    };
+    if (tokens.access_token) update.accessToken = tokens.access_token;
+    if (tokens.refresh_token) update.refreshToken = tokens.refresh_token;
+    if (tokens.expiry_date) update.tokenExpiresAt = new Date(tokens.expiry_date);
+    if (!update.accessToken && !update.refreshToken) return;
+
+    db.update(emailSendAccounts)
+      .set(update)
+      .where(eq(emailSendAccounts.accountIndex, accountIndex))
+      .catch((err) => console.error(`Failed to persist refreshed Gmail token (account ${accountIndex}):`, err));
   });
 
   return google.gmail({ version: "v1", auth });
@@ -113,7 +154,7 @@ export async function sendEmailViaGmail({
   threadId?: string | null;
 }): Promise<{ messageId: string; fromAddress: string; threadId: string | null; rfc822MessageId: string | null }> {
   try {
-    const gmail = getGmailClient(accountIndex);
+    const gmail = await getGmailClient(accountIndex);
     const fromAddress = getFromEmailForAccount(accountIndex);
 
     const boundary = `----=_HartwichOS_${crypto.randomBytes(12).toString("hex")}`;
@@ -213,7 +254,7 @@ export async function listGmailMessages(
   maxResults: number = 50
 ) {
   try {
-    const gmail = getGmailClient(accountIndex);
+    const gmail = await getGmailClient(accountIndex);
     const response = await gmail.users.messages.list({
       userId: "me",
       q: query,
@@ -234,7 +275,7 @@ export async function getGmailMessage(
   messageId: string
 ) {
   try {
-    const gmail = getGmailClient(accountIndex);
+    const gmail = await getGmailClient(accountIndex);
     const response = await gmail.users.messages.get({
       userId: "me",
       id: messageId,
@@ -267,7 +308,7 @@ export async function getUnreadMessages(accountIndex: EmailAccountIndex) {
  */
 export async function markMessageRead(accountIndex: EmailAccountIndex, messageId: string): Promise<void> {
   try {
-    const gmail = getGmailClient(accountIndex);
+    const gmail = await getGmailClient(accountIndex);
     await gmail.users.messages.modify({
       userId: "me",
       id: messageId,
