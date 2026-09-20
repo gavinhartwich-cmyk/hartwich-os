@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { listPipelineStages } from "@/lib/data/pipeline-stages";
 import { listDealsForBoard } from "@/lib/data/deals";
-import { listPendingEmailDrafts } from "@/lib/data/email-drafts";
 import { getCurrentAppUser, listAppUsers } from "@/lib/auth/current-user";
 import Board from "./board";
 
+// Pending-draft review lives only on the AI board (see
+// app/(app)/ai-workforce/board/page.tsx) — this board is manually-worked
+// leads, and reviewing AI-drafted follow-ups doesn't belong mixed into that
+// (Gavin, 2026-09-20). Passing an empty array rather than making the prop
+// optional keeps Board's rendering logic identical either way.
 export default async function BoardPage() {
-  const [stages, deals, emailDrafts, currentUser, users] = await Promise.all([
+  const [stages, deals, currentUser, users] = await Promise.all([
     listPipelineStages(),
     listDealsForBoard("manual"),
-    listPendingEmailDrafts(),
     getCurrentAppUser(),
     listAppUsers(),
   ]);
@@ -41,7 +44,7 @@ export default async function BoardPage() {
         <Board
           stages={stages}
           initialDeals={deals}
-          emailDrafts={emailDrafts}
+          emailDrafts={[]}
           currentUserId={currentUser?.id ?? ""}
           users={users.map((u) => ({ id: u.id, name: u.name }))}
         />

@@ -2,7 +2,13 @@ import "server-only";
 import { db } from "@/db";
 import { emailSendAccounts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { canSendEmail, shouldResetDailyCounter, getTodayMidnightWinnipeg, startsNewSendDay } from "@/lib/warmup/schedule";
+import {
+  canSendEmail,
+  shouldResetDailyCounter,
+  getTodayMidnightWinnipeg,
+  startsNewSendDay,
+  isWarmupComplete,
+} from "@/lib/warmup/schedule";
 
 export type EmailAccountIndex = 0 | 1 | 2;
 const ACCOUNT_INDICES: EmailAccountIndex[] = [0, 1, 2];
@@ -114,6 +120,20 @@ export async function recordEmailSent(accountIndex: EmailAccountIndex): Promise<
       updatedAt: now,
     })
     .where(eq(emailSendAccounts.accountIndex, accountIndex));
+}
+
+/**
+ * Whether every rotating account has finished warm-up (see
+ * isWarmupComplete/WARMUP_TOTAL_RAMP_DAYS) — the gate for auto-approving an
+ * AI-drafted follow-up instead of leaving it for human review (see
+ * src/lib/emails/cadence.ts). Checks all 3, not just whichever one would
+ * send this particular email: warm-up is about the reputation Hartwich Labs'
+ * sending has earned overall, and the round-robin can hand a send to any of
+ * the 3 accounts, so one still-ramping account is still a real risk.
+ */
+export async function allAccountsFullyWarm(): Promise<boolean> {
+  const accounts = await Promise.all(ACCOUNT_INDICES.map(getOrCreateAccount));
+  return accounts.every((a) => isWarmupComplete(a.activeSendDays));
 }
 
 export { ACCOUNT_INDICES };
